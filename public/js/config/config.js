@@ -1,7 +1,7 @@
-// SECURITY: Environment variables are now handled securely
+// security: Environment variables are now handled securely
 // Auth operations use a limited client, database operations go through server API
 // import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { supabaseReady } from "../lib/supabase-boot.js";
+import { supabaseReady } from "../lib/supabaseBoot.js";
 
 // Fetch Supabase configuration securely from server
 let _supabaseConfig = null;
@@ -62,7 +62,7 @@ const supabaseProxy = new Proxy(
         return supabase[prop];
       }
       // Kick off initialization (single flight)
-      initializeSupabase().catch(() => {});
+      initializeSupabase().catch(() => { });
       // Return a promise-based method for async operations
       if (prop === "auth") {
         return new Proxy(
@@ -137,6 +137,6 @@ class SecureDatabaseClient {
 export const db = new SecureDatabaseClient();
 
 export const brandConfig = {
-  name: "CitizenLink",
+  name: "DRIMS",
   dashboardUrl: "/dashboard",
 };

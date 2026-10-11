@@ -3,31 +3,92 @@ const express = require("express");
 const router = express.Router();
 const Database = require("../config/database");
 const { authenticateUser, requireRole } = require("../middleware/auth");
-const DepartmentService = require("../services/DepartmentService");
+const departmentService = require("../services/DepartmentService");
+const { csrfProtection } = require("../middleware/csrf");
 
-// Get all categories with their subcategories and departments
-router.get("/categories", async (req, res) => {
+// SEC-16 FIX: CSRF protection on all state-changing routes
+router.use(csrfProtection);
+
+// Get all categories with their subcategories and departments — SEC-08 FIX: require auth
+router.get("/categories", authenticateUser, async (req, res) => {
   try {
-    const { data: categories, error: categoriesError } = await Database.getClient()
+    const supabase = Database.getClient();
+
+    // 1. Fetch Categories
+    const { data: categories, error: catError } = await supabase
       .from("categories")
-      .select(`
-        *,
-        subcategories (
-          *,
-          departments (
-            *,
-            department_subcategory_mapping (
-              response_priority
-            )
-          )
-        )
-      `)
+      .select("*")
       .eq("is_active", true)
       .order("sort_order");
-    if (categoriesError) throw categoriesError;
+
+    if (catError) throw catError;
+
+    // 2. Fetch Subcategories
+    const { data: subcategories, error: subError } = await supabase
+      .from("subcategories")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order");
+
+    if (subError) throw subError;
+
+    // 3. Fetch departments
+    const { data: departments, error: deptError } = await supabase
+      .from("departments")
+      .select("*")
+      .eq("is_active", true);
+
+    if (deptError) throw deptError;
+
+    // 4. Fetch Mappings (Subcategory <-> department)
+    const { data: mappings, error: mapError } = await supabase
+      .from("department_subcategory_mapping")
+      .select("subcategory_id, department_id, response_priority");
+
+    if (mapError) {
+      console.warn("Error fetching mappings:", mapError.message);
+      // Continue, just won't have departments mapped
+    }
+
+    // 5. Assemble Hierarchy
+    const deptMap = new Map((departments || []).map(d => [d.id, d]));
+
+    // Group departments by subcategory
+    const subcategoryDepts = {};
+    (mappings || []).forEach(m => {
+      if (!subcategoryDepts[m.subcategory_id]) {
+        subcategoryDepts[m.subcategory_id] = [];
+      }
+      const dept = deptMap.get(m.department_id);
+      if (dept) {
+        subcategoryDepts[m.subcategory_id].push({
+          ...dept,
+          department_subcategory_mapping: {
+            response_priority: m.response_priority
+          }
+        });
+      }
+    });
+
+    // Attach departments to subcategories
+    const subsWithDepts = (subcategories || []).map(sub => ({
+      ...sub,
+      departments: (subcategoryDepts[sub.id] || []).sort((a, b) => {
+        // Sort by response priority derived from mapping
+        return (a.department_subcategory_mapping?.response_priority || 999) -
+          (b.department_subcategory_mapping?.response_priority || 999);
+      })
+    }));
+
+    // Attach subcategories to categories
+    const result = (categories || []).map(cat => ({
+      ...cat,
+      subcategories: subsWithDepts.filter(s => s.category_id === cat.id)
+    }));
+
     res.json({
       success: true,
-      data: categories
+      data: result
     });
   } catch (error) {
     console.error("Error fetching categories:", error);
@@ -38,28 +99,55 @@ router.get("/categories", async (req, res) => {
   }
 });
 
-// Get subcategories for a specific category
-router.get("/categories/:categoryId/subcategories", async (req, res) => {
+// Get subcategories for a specific category — SEC-08 FIX
+router.get("/categories/:categoryId/subcategories", authenticateUser, async (req, res) => {
   try {
     const { categoryId } = req.params;
     const { data: subcategories, error } = await Database.getClient()
       .from("subcategories")
       .select(`
         *,
-        departments (
-          *,
-          department_subcategory_mapping (
-            response_priority
-          )
+        department_subcategory_mapping (
+          response_priority,
+          departments (*)
         )
       `)
       .eq("category_id", categoryId)
       .eq("is_active", true)
       .order("sort_order");
+
     if (error) throw error;
+
+    // Transform data to match expected format
+    const transformed = (subcategories || []).map(sub => {
+      const departments = (sub.department_subcategory_mapping || [])
+        .map(mapping => {
+          if (!mapping.departments) return null;
+          return {
+            ...mapping.departments,
+            department_subcategory_mapping: {
+              response_priority: mapping.response_priority
+            }
+          };
+        })
+        .filter(d => d !== null)
+        .sort((a, b) => {
+          const pA = a.department_subcategory_mapping?.response_priority || 999;
+          const pB = b.department_subcategory_mapping?.response_priority || 999;
+          return pA - pB;
+        });
+
+      // Remove the raw mapping array and attach formatted departments
+      const { department_subcategory_mapping, ...rest } = sub;
+      return {
+        ...rest,
+        departments
+      };
+    });
+
     res.json({
       success: true,
-      data: subcategories
+      data: transformed
     });
   } catch (error) {
     console.error("Error fetching subcategories:", error);
@@ -70,20 +158,20 @@ router.get("/categories/:categoryId/subcategories", async (req, res) => {
   }
 });
 
-// Get departments for a specific subcategory
-router.get("/subcategories/:subcategoryId/departments", async (req, res) => {
+// Get departments for a specific subcategory — SEC-08 FIX
+router.get("/subcategories/:subcategoryId/departments", authenticateUser, async (req, res) => {
   try {
     const { subcategoryId } = req.params;
     // console.log removed for security
     const supabase = Database.getClient();
     // 1) Get ALL active departments (not just mapped ones)
-    const { data: allDepartments, error: deptError } = await supabase
+    const { data: alldepartments, error: deptError } = await supabase
       .from("departments")
       .select("*")
       .eq("is_active", true)
       .order("name");
     if (deptError) {
-      console.error("[DEPT-API] Departments query error:", deptError);
+      console.error("[DEPT-API] departments query error:", deptError);
       throw deptError;
     }
     // 2) Get department mappings for this subcategory (for reference)
@@ -98,7 +186,7 @@ router.get("/subcategories/:subcategoryId/departments", async (req, res) => {
 
     // 3) Attach mapping info to each department result (if mapped)
     const mapByDeptId = new Map((mappings || []).map(m => [m.department_id, m]));
-    const enriched = (allDepartments || []).map(d => ({
+    const enriched = (alldepartments || []).map(d => ({
       ...d,
       department_subcategory_mapping: mapByDeptId.get(d.id) || null
     }));
@@ -118,25 +206,25 @@ router.get("/subcategories/:subcategoryId/departments", async (req, res) => {
   }
 });
 
-// Get ALL departments (for showing all departments regardless of category)
-router.get("/departments/all", async (req, res) => {
+// Get ALL departments — SEC-08 FIX
+router.get("/departments/all", authenticateUser, async (req, res) => {
   try {
     // console.log removed for security
     const supabase = Database.getClient();
     // Get ALL active departments
-    const { data: allDepartments, error: deptError } = await supabase
+    const { data: alldepartments, error: deptError } = await supabase
       .from("departments")
       .select("*")
       .eq("is_active", true)
       .order("name");
     if (deptError) {
-      console.error("[DEPT-API] Departments query error:", deptError);
+      console.error("[DEPT-API] departments query error:", deptError);
       throw deptError;
     }
     // console.log removed for security
     res.json({
       success: true,
-      data: allDepartments
+      data: alldepartments
     });
   } catch (error) {
     console.error("Error fetching all departments:", error);
@@ -147,23 +235,23 @@ router.get("/departments/all", async (req, res) => {
   }
 });
 
-// Get ALL departments (alias for /departments/all)
-router.get("/departments", async (req, res) => {
+// Get ALL departments (alias) — SEC-08 FIX
+router.get("/departments", authenticateUser, async (req, res) => {
   try {
     const supabase = Database.getClient();
     // Get ALL active departments
-    const { data: allDepartments, error: deptError } = await supabase
+    const { data: alldepartments, error: deptError } = await supabase
       .from("departments")
       .select("*")
       .eq("is_active", true)
       .order("name");
     if (deptError) {
-      console.error("[DEPT-API] Departments query error:", deptError);
+      console.error("[DEPT-API] departments query error:", deptError);
       throw deptError;
     }
     res.json({
       success: true,
-      data: allDepartments
+      data: alldepartments
     });
   } catch (error) {
     console.error("Error fetching departments:", error);
@@ -174,8 +262,8 @@ router.get("/departments", async (req, res) => {
   }
 });
 
-// Get department structure for complaint form (simplified)
-router.get("/complaint-form", async (req, res) => {
+// Get department structure for complaint form — SEC-08 FIX
+router.get("/complaint-form", authenticateUser, async (req, res) => {
   try {
     const { data: categories, error } = await Database.getClient()
       .from("categories")
@@ -220,7 +308,7 @@ router.post(
   requireRole(["super-admin"]),
   async (req, res) => {
     try {
-      const category = await DepartmentService.createCategory(req.body);
+      const category = await departmentService.createCategory(req.body);
       res.json(category);
     } catch (error) {
       console.error("Error creating category:", error);
@@ -236,7 +324,7 @@ router.put(
   requireRole(["super-admin"]),
   async (req, res) => {
     try {
-      const category = await DepartmentService.updateCategory(
+      const category = await departmentService.updateCategory(
         req.params.id,
         req.body
       );
@@ -255,7 +343,7 @@ router.delete(
   requireRole(["super-admin"]),
   async (req, res) => {
     try {
-      await DepartmentService.deleteCategory(req.params.id);
+      await departmentService.deleteCategory(req.params.id);
       res.json({ message: "Category deactivated successfully" });
     } catch (error) {
       console.error("Error deactivating category:", error);
@@ -271,7 +359,7 @@ router.post(
   requireRole(["super-admin"]),
   async (req, res) => {
     try {
-      const subcategory = await DepartmentService.createSubcategory(req.body);
+      const subcategory = await departmentService.createSubcategory(req.body);
       res.json(subcategory);
     } catch (error) {
       console.error("Error creating subcategory:", error);
@@ -287,7 +375,7 @@ router.put(
   requireRole(["super-admin"]),
   async (req, res) => {
     try {
-      const subcategory = await DepartmentService.updateSubcategory(
+      const subcategory = await departmentService.updateSubcategory(
         req.params.id,
         req.body
       );
@@ -306,7 +394,7 @@ router.delete(
   requireRole(["super-admin"]),
   async (req, res) => {
     try {
-      await DepartmentService.deleteSubcategory(req.params.id);
+      await departmentService.deleteSubcategory(req.params.id);
       res.json({ message: "Subcategory deactivated successfully" });
     } catch (error) {
       console.error("Error deactivating subcategory:", error);
@@ -315,14 +403,14 @@ router.delete(
   }
 );
 
-// Admin: Create new department
+// Admin: Create new Department
 router.post(
   "/admin/departments",
   authenticateUser,
   requireRole(["super-admin"]),
   async (req, res) => {
     try {
-      const department = await DepartmentService.createDepartment(req.body);
+      const department = await departmentService.createdepartment(req.body);
       res.json(department);
     } catch (error) {
       console.error("Error creating department:", error);
@@ -415,7 +503,7 @@ router.delete(
       if (error) throw error;
       res.json({
         success: true,
-        message: "Department deactivated successfully"
+        message: "department deactivated successfully"
       });
     } catch (error) {
       console.error("Error deactivating department:", error);

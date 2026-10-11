@@ -1,12 +1,16 @@
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Digos City Map</title>
-    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Digos City Map</title>
+    <link rel="stylesheet" href="/css/base/style.css" />
     <link rel="stylesheet" href="/css/components/sidebar.css" />
-    <link rel="stylesheet" href="/css/header-redesign.css" />
-    <link rel="stylesheet" href="/css/complaint-form.css" />
+    <link rel="stylesheet" href="/css/components/header.css" />
+    <link rel="stylesheet" href="/css/complaintForm.css" />
+    <link rel="stylesheet" href="/css/layouts/viewportFix.css" />
+    <link rel="stylesheet" href="/css/components/skeleton.css" />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -14,11 +18,70 @@
       crossorigin=""
     />
     <style>
+      body.page-digos-map .complaint-wizard-container {
+        max-width: min(1700px, calc(100vw - 120px));
+        width: 100%;
+        padding-top: 8px;
+        padding-bottom: 16px;
+      }
+
+      body.page-digos-map .page-header {
+        margin-bottom: 0.75rem;
+      }
+
+      body.page-digos-map .page-title {
+        font-size: 1.85rem;
+        margin-bottom: 0.2rem;
+      }
+
+      body.page-digos-map .page-subtitle {
+        font-size: 0.98rem;
+      }
+
+      body.page-digos-map .form-section {
+        padding: 1rem;
+      }
+
+      body.page-digos-map .section-header {
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.6rem;
+      }
+
+      body.page-digos-map .section-header h3 {
+        font-size: 1.08rem;
+      }
+
+      /* Visually obvious equal inset around the map canvas */
+      body.page-digos-map .map-wrapper {
+        margin: 0 14px !important;
+        border-radius: 12px !important;
+      }
+
+      @media (max-width: 1024px) {
+        body.page-digos-map .complaint-wizard-container {
+          max-width: 100%;
+          padding-top: 6px;
+          padding-bottom: 12px;
+        }
+
+        body.page-digos-map .map-wrapper {
+          margin: 0 10px !important;
+        }
+      }
+
       #digos-map {
-        height: 650px;
+        height: 40vh;
+        max-height: 460px;
+        min-height: 240px;
         width: 100%;
         border-radius: 12px;
         z-index: 1;
+      }
+
+      @supports (height: 100dvh) {
+        #digos-map {
+          height: 40dvh;
+        }
       }
       /* Fix for leaflet z-index in premium cards */
       .leaflet-pane {
@@ -30,13 +93,36 @@
       }
     </style>
   </head>
-  <body>
+  <body class="page-digos-map">
     <div class="app-container">
-      <div class="header-container"></div>
       <div id="sidebar" class="collapsible"></div>
 
-      <div id="app" class="collapsible main-content-wrapper">
-        <div class="complaint-wizard-container">
+      <div id="app" class="collapsible" style="display: flex; flex-direction: column;">
+        <div class="header-container"></div>
+
+        <div class="dashboard-main-wrapper main-content-wrapper" style="display: flex; flex-direction: column; flex: 1;">
+          <!-- Global Skeleton Loader (matches Map structure) -->
+          <div id="dashboard-loading" class="dashboard-loading complaint-wizard-container"
+            style="display: flex; flex-direction: column; width: 100%; align-items: center;">
+            <!-- Page Header Skeleton -->
+            <div class="page-header" style="width: 100%; display: flex; flex-direction: column; align-items: center; margin-bottom: 2rem;">
+              <div class="skeleton skeleton-title" style="width: 320px; height: 36px; margin-bottom: 0.75rem; border-radius: 8px;"></div>
+              <div class="skeleton skeleton-subtitle" style="width: 420px; height: 20px; border-radius: 6px;"></div>
+            </div>
+
+            <!-- Map Card Skeleton -->
+            <div class="form-section card-glass" style="width: 100%; max-width: 1200px; padding: 2rem; border-radius: 16px; box-sizing: border-box;">
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem;">
+                <div class="skeleton" style="width: 32px; height: 32px; border-radius: 8px;"></div>
+                <div class="skeleton" style="width: 180px; height: 28px; border-radius: 6px;"></div>
+              </div>
+              <div class="skeleton" style="width: 100%; height: 40vh; max-height: 460px; min-height: 240px; border-radius: 12px;"></div>
+              <div class="skeleton" style="width: 100%; height: 48px; margin-top: 1.5rem; border-radius: 8px;"></div>
+            </div>
+          </div>
+
+          <!-- Real Map Content -->
+          <div id="map-main-content" class="complaint-wizard-container" style="display: none; opacity: 0; transition: opacity 0.3s ease; width: 100%;">
           <!-- Page Header -->
           <div class="page-header">
             <h1 class="page-title">Digos City Barangay Map</h1>
@@ -80,6 +166,7 @@
               >
             </div>
           </div>
+          </div>
         </div>
       </div>
     </div>
@@ -90,6 +177,26 @@
     ></script>
     <script type="module" src="/js/components/header.js"></script>
     <script type="module" src="/js/components/sidebar.js"></script>
-    <script src="/js/pages/digos-map.js"></script>
+    <script src="/js/pages/digosMap.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        setTimeout(() => {
+          const loader = document.getElementById("dashboard-loading");
+          const mainContent = document.getElementById("map-main-content");
+          if (loader) {
+            loader.style.opacity = "0";
+            loader.style.transition = "opacity 0.3s ease";
+            setTimeout(() => {
+              loader.style.display = "none";
+              if (mainContent) {
+                mainContent.style.display = "block";
+                mainContent.offsetHeight;
+                mainContent.style.opacity = "1";
+              }
+            }, 300);
+          }
+        }, 150);
+      });
+    </script>
   </body>
 </html>

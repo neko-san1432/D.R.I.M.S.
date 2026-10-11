@@ -2,7 +2,7 @@ const ComplaintRepository = require("../repositories/ComplaintRepository");
 const Database = require("../config/database");
 
 /**
- * DuplicationDetectionService
+ * duplicationDetectionService
  * Detects duplicate and similar complaints using multiple algorithms
  */
 class DuplicationDetectionService {
@@ -25,9 +25,9 @@ class DuplicationDetectionService {
     try {
       const complaint = await this.complaintRepo.findById(complaintId);
       if (!complaint) {
-        throw new Error("Complaint not found");
+        throw new Error("complaint not found");
       }
-      // Convert Complaint model to plain object for similarity algorithms
+      // Convert complaint model to plain object for similarity algorithms
       const complaintData = complaint.toJSON ? complaint.toJSON() : complaint;
 
       // Run multiple detection algorithms
@@ -70,27 +70,28 @@ class DuplicationDetectionService {
     }
     return candidates
       .map((candidate) => {
-        const titleScore = this.calculateTextSimilarity(
-          (complaint.title || "").toLowerCase(),
-          (candidate.title || "").toLowerCase()
+        // FC-06 FIX: textScore1 compares description text, textScore2 compares location text
+        const textScore1 = this.calculateTextSimilarity(
+          (complaint.description || "").toLowerCase(),
+          (candidate.description || "").toLowerCase()
         );
-        const descScore = this.calculateTextSimilarity(
-          (complaint.descriptive_su || "").toLowerCase(),
-          (candidate.descriptive_su || "").toLowerCase()
+        const textScore2 = this.calculateTextSimilarity(
+          (complaint.location_text || complaint.location || "").toLowerCase(),
+          (candidate.location_text || candidate.location || "").toLowerCase()
         );
         const keywordScore = this.calculateKeywordOverlap(
-          `${complaint.title || ""} ${complaint.descriptive_su || ""}`,
-          `${candidate.title || ""} ${candidate.descriptive_su || ""}`
+          `${complaint.description || ""}`,
+          `${candidate.description || ""}`
         );
         const textScore =
-          titleScore * 0.4 + descScore * 0.4 + keywordScore * 0.2;
+          textScore1 * 0.4 + textScore2 * 0.4 + keywordScore * 0.2;
 
         return {
           complaint_id: candidate.id,
           score: textScore,
           factors: {
-            titleSimilarity: titleScore,
-            descriptionSimilarity: descScore,
+            textSimilarity1: textScore1,
+            textSimilarity2: textScore2,
             keywordOverlap: keywordScore,
           },
           method: "text",

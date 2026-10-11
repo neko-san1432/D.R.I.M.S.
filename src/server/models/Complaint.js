@@ -3,15 +3,17 @@ class Complaint {
     this.id = data.id;
     this.submitted_by = data.submitted_by;
     this.title = data.title;
-    this.descriptive_su = data.descriptive_su;
+    this.description = data.description || data.descriptive_su;
     this.location_text = data.location_text;
     this.latitude = data.latitude;
     this.longitude = data.longitude;
-    this.department_r = data.department_r || [];
+    this.departments = data.departments || data.department_r || [];
     this.preferred_departments = data.preferred_departments || [];
     this.category = data.category;
     this.subcategory = data.subcategory;
-    this.workflow_status = data.workflow_status || "new";
+    this.category_name = data.category_name;
+    this.subcategory_name = data.subcategory_name;
+    this.workflow_status = data.workflow_status || "submitted";
     this.priority = data.priority || "low";
     this.urgency_level = data.urgency_level || "low";
     // Evidence is now handled separately - not stored in complaints table
@@ -25,9 +27,8 @@ class Complaint {
     this.master_complaint_id = data.master_complaint_id;
     this.task_force_id = data.task_force_id;
     this.coordinator_notes = data.coordinator_notes;
+    this.comment = data.comment || {};
     this.estimated_resolution_date = data.estimated_resolution_date;
-    this.submitted_at = data.submitted_at;
-    this.updated_at = data.updated_at;
     this.submitted_at = data.submitted_at;
     this.updated_at = data.updated_at;
     this.upvote_count = data.upvote_count || 0;
@@ -42,7 +43,8 @@ class Complaint {
     if (!data.title || data.title.trim().length < 5) {
       errors.push("Title must be at least 5 characters");
     }
-    if (!data.descriptive_su || data.descriptive_su.trim().length < 10) {
+    const description = data.description || data.descriptive_su;
+    if (!description || description.trim().length < 10) {
       errors.push("Description must be at least 10 characters");
     }
     // Location check removed to allow frontend flexibility
@@ -78,28 +80,17 @@ class Complaint {
             original_lng: "[REDACTED]",
           });
           errors.push(
-            "Complaint location must be within Digos City boundaries"
+            "complaint location must be within Digos City boundaries"
           );
         }
       }
     }
-    const validStatuses = [
-      "pending review",
-      "in progress",
-      "resolved",
-      "closed",
-      "rejected",
-    ];
-    if (data.status && !validStatuses.includes(data.status)) {
-      errors.push("Invalid status");
-    }
     const validWorkflowStatuses = [
-      "new",
-      "assigned",
-      "in_progress",
-      "pending_approval",
-      "completed",
-      "cancelled",
+      "submitted",
+      "verified",
+      "under_review",
+      "action_taken",
+      "resolved",
     ];
     if (
       data.workflow_status &&
@@ -123,18 +114,18 @@ class Complaint {
   sanitizeForInsert() {
     return {
       submitted_by: this.submitted_by,
-      title: this.title?.trim(),
-      descriptive_su: this.descriptive_su?.trim(),
+      // title: this.title?.trim(), // Removed - Validation Only, not in DB
+      description: this.description?.trim(),
       location_text: this.location_text?.trim(),
       latitude: this.latitude ? parseFloat(this.latitude) : null,
       longitude: this.longitude ? parseFloat(this.longitude) : null,
-      department_r: Array.isArray(this.department_r) ? this.department_r : [],
-      preferred_departments: Array.isArray(this.preferred_departments)
-        ? this.preferred_departments
-        : [],
+      departments: Array.isArray(this.departments) ? this.departments : [],
+      // preferred_departments: Array.isArray(this.preferred_departments)
+      //   ? this.preferred_departments
+      //   : [], // Removed - Used for logic but not stored in complaints table
       category: this.category,
       subcategory: this.subcategory,
-      workflow_status: this.workflow_status || "new",
+      workflow_status: this.workflow_status || "submitted",
       priority: this.priority || "low",
       urgency_level: this.urgency_level || "low",
       assigned_coordinator_id: this.assigned_coordinator_id || null,
@@ -152,14 +143,16 @@ class Complaint {
       id: this.id,
       submitted_by: this.submitted_by,
       title: this.title,
-      descriptive_su: this.descriptive_su,
+      description: this.description,
       location_text: this.location_text,
       latitude: this.latitude,
       longitude: this.longitude,
-      department_r: this.department_r,
+      departments: this.departments,
       preferred_departments: this.preferred_departments,
       category: this.category,
       subcategory: this.subcategory,
+      category_name: this.category_name,
+      subcategory_name: this.subcategory_name,
       workflow_status: this.workflow_status,
       priority: this.priority,
       urgency_level: this.urgency_level,
@@ -170,6 +163,7 @@ class Complaint {
       master_complaint_id: this.master_complaint_id,
       task_force_id: this.task_force_id,
       coordinator_notes: this.coordinator_notes,
+      comment: this.comment,
       estimated_resolution_date: this.estimated_resolution_date,
       submitted_at: this.submitted_at,
       updated_at: this.updated_at,

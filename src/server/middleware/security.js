@@ -2,6 +2,7 @@ const helmet = require("helmet");
 
 // Content Security Policy configuration
 const cspConfig = {
+  useDefaults: false,
   directives: {
     defaultSrc: ["'self'"],
     styleSrc: [
@@ -13,15 +14,16 @@ const cspConfig = {
     ],
     scriptSrc: [
       "'self'",
-      "'unsafe-inline'", // Allowed for onclick handlers
-      "'unsafe-eval'", // Required for some reCAPTCHA implementations
+      "'unsafe-inline'", // SEC-11: Keep until inline onclick handlers are migrated to addEventListener
+      "'unsafe-eval'", // Required by Turf.js (new Function for spatial ops) and TF.js WASM backend
       "https://www.google.com",
       "https://www.gstatic.com",
       "https://unpkg.com",
       "https://esm.sh",
-      "https://cdn.jsdelivr.net", // Ensure this is explicitly allowed
+      "https://cdn.jsdelivr.net",
       "https://cdn.tailwindcss.com",
       "https://cdnjs.cloudflare.com",
+      "https://cdn.sheetjs.com",
     ],
     imgSrc: [
       "'self'",
@@ -48,6 +50,9 @@ const cspConfig = {
       "https://esm.sh",
       "https://cdn.jsdelivr.net",
       "https://unpkg.com",
+      "https://tfhub.dev",
+      "https://www.kaggle.com",
+      "https://storage.googleapis.com",
       "http://localhost:*",
       "ws://localhost:*",
     ],
@@ -70,9 +75,6 @@ const cspConfig = {
 // Add upgrade-insecure-requests only in production
 if (process.env.NODE_ENV === "production") {
   cspConfig.directives.upgradeInsecureRequests = [];
-} else {
-  // Explicitly remove upgrade-insecure-requests in development
-  delete cspConfig.directives.upgradeInsecureRequests;
 }
 // Enhanced security headers using helmet
 const securityHeaders = helmet({

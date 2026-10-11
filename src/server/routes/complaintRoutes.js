@@ -54,15 +54,15 @@ router.post(
   complaintLimiter,
   upload,
   csrfProtection,
-  validate(schemas.createComplaint),
-  wrap(complaintController.createComplaint)
+  validate(schemas.createcomplaint),
+  wrap(complaintController.createcomplaint)
 );
 
 router.get(
   "/my",
   authenticateUser,
   requireRole(["citizen"]),
-  wrap(complaintController.getMyComplaints)
+  wrap(complaintController.getMycomplaints)
 );
 
 router.get(
@@ -75,22 +75,22 @@ router.get(
 router.get(
   "/stats",
   authenticateUser,
-  requireRole([/^lgu-/, "super-admin", "complaint-coordinator"]),
-  wrap(complaintController.getComplaintStats)
+  requireRole(["lgu", "super-admin"]),
+  wrap(complaintController.getcomplaintStats)
 );
 
 router.get(
   "/locations",
   authenticateUser,
-  requireRole([/^lgu-/, "super-admin", "complaint-coordinator"]),
-  wrap(complaintController.getComplaintLocations)
+  requireRole(["citizen", "lgu", "super-admin"]),
+  wrap(complaintController.getcomplaintLocations)
 );
 
 router.get(
   "/",
   authenticateUser,
-  requireRole([/^lgu-/, "super-admin"]),
-  wrap(complaintController.getAllComplaints)
+  requireRole(["lgu", "super-admin"]),
+  wrap(complaintController.getAllcomplaints)
 );
 
 router.get(
@@ -98,35 +98,44 @@ router.get(
   authenticateUser,
   requireRole([
     "citizen",
-    "coordinator",
-    "lgu-admin",
-    "lgu-officer",
-    "hr",
+    "lgu",
     "super-admin",
   ]),
-  wrap(complaintController.getComplaintEvidence)
+  wrap(complaintController.getcomplaintEvidence)
+);
+
+router.get(
+  "/:id/history",
+  authenticateUser,
+  wrap(complaintController.getcomplaintHistory)
 );
 
 router.get(
   "/:id",
   authenticateUser,
-  wrap(complaintController.getComplaintById)
+  wrap(complaintController.getcomplaintById)
 );
 
 router.patch(
   "/:id/status",
   authenticateUser,
-  requireRole([/^lgu-/, "super-admin"]),
-  requireRole([/^lgu-/, "super-admin"]),
+  requireRole(["lgu", "super-admin"]),
   validate(schemas.updateStatus),
-  wrap(complaintController.updateComplaintStatus)
+  wrap(complaintController.updatecomplaintStatus)
+);
+
+router.get(
+  "/:id/status",
+  authenticateUser,
+  requireRole(["lgu", "super-admin"]),
+  wrap(complaintController.getcomplaintStatus)
 );
 
 // Human confirmation workflow transitions (officer -> admin -> citizen)
 router.patch(
   "/:id/transition",
   authenticateUser,
-  requireRole([/^lgu-/, "super-admin", "citizen"]),
+  requireRole(["lgu", "super-admin", "citizen"]),
   upload, // allow evidence on transition
   wrap(complaintController.transitionStatus)
 );
@@ -134,8 +143,7 @@ router.patch(
 router.patch(
   "/:id/assign-coordinator",
   authenticateUser,
-  requireRole(["lgu-admin", "super-admin"]),
-  requireRole(["lgu-admin", "super-admin"]),
+  requireRole(["lgu", "super-admin"]),
   validate(schemas.assignCoordinator),
   wrap(complaintController.assignCoordinator)
 );
@@ -143,40 +151,15 @@ router.patch(
 router.patch(
   "/:id/transfer",
   authenticateUser,
-  requireRole(["lgu-admin", "super-admin"]),
-  requireRole(["lgu-admin", "super-admin"]),
-  validate(schemas.transferComplaint),
-  wrap(complaintController.transferComplaint)
+  requireRole(["lgu", "super-admin"]),
+  validate(schemas.transfercomplaint),
+  wrap(complaintController.transfercomplaint)
 );
 
-// Citizen-specific endpoints
-router.post(
-  "/:id/cancel",
-  authenticateUser,
-  requireRole(["citizen"]),
-  validate(schemas.cancelComplaint),
-  wrap(complaintController.cancelComplaint)
-);
-
-// [DEBUG] Handle GET requests to cancel endpoint with specific error
-router.get(
-  "/:id/cancel",
-  (req, res) => {
-    res.status(405).json({
-      success: false,
-      error: "Method Not Allowed. Use POST to cancel complaint.",
-      debug: {
-        method: req.method,
-        path: req.path
-      }
-    });
-  }
-);
 
 router.post(
   "/:id/remind",
   authenticateUser,
-  requireRole(["citizen"]),
   requireRole(["citizen"]),
   validate(schemas.sendReminder),
   wrap(complaintController.sendReminder)
@@ -185,7 +168,6 @@ router.post(
 router.post(
   "/:id/confirm-resolution",
   authenticateUser,
-  requireRole(["citizen"]),
   requireRole(["citizen"]),
   validate(schemas.confirmResolution),
   wrap(complaintController.confirmResolution)
@@ -215,11 +197,10 @@ const completionUpload = multer({
 }).fields([{ name: "completionEvidence", maxCount: 5 }]);
 
 // LGU Officer/Admin endpoints for assignment completion
-// Admins can also complete assignments they've created
 router.post(
   "/:id/mark-complete",
   authenticateUser,
-  requireRole(["lgu", /^lgu-(?!hr)/]), // Allow both officers and admins
+  requireRole(["lgu"]),
   completionUpload,
   wrap(complaintController.markAssignmentComplete)
 );
@@ -231,35 +212,35 @@ router.get(
   wrap(complaintController.getConfirmationMessage)
 );
 
-// False complaint endpoints (coordinator only)
+// False complaint endpoints
 router.post(
   "/:id/mark-false",
   authenticateUser,
-  requireRole(["complaint-coordinator"]),
-  requireRole(["complaint-coordinator"]),
+  requireRole(["lgu", "super-admin"]),
   validate(schemas.markAsFalse),
-  wrap(complaintController.markAsFalseComplaint)
+  wrap(complaintController.markAsFalsecomplaint)
 );
 
-// Admin Tool: Check for duplicates for a specific ticket
+// SEC-20 FIX: Add role check to potential-duplicates
 router.get(
   "/:id/potential-duplicates",
   authenticateUser,
+  requireRole(["lgu", "super-admin"]),
   wrap(complaintController.getPotentialDuplicatesForId)
 );
 
-// Admin Tool: Bulk Merge
+// SEC-20 FIX: Add role check to bulk-merge
 router.post(
   "/:id/bulk-merge",
   authenticateUser,
-  wrap(complaintController.bulkMergeComplaints)
+  requireRole(["lgu", "super-admin"]),
+  wrap(complaintController.bulkMergecomplaints)
 );
 
 router.post(
   "/:id/mark-duplicate",
   authenticateUser,
-  requireRole(["complaint-coordinator"]),
-  requireRole(["complaint-coordinator"]),
+  requireRole(["lgu", "super-admin"]),
   validate(schemas.markAsDuplicate),
   wrap(complaintController.markAsDuplicate)
 );
@@ -267,21 +248,22 @@ router.post(
 router.post(
   "/:id/upvote",
   authenticateUser,
-  wrap(complaintController.upvoteComplaint)
+  wrap(complaintController.upvotecomplaint)
 );
 
 router.get(
   "/false-reports",
   authenticateUser,
-  requireRole(["complaint-coordinator", "super-admin"]),
-  wrap(complaintController.getFalseComplaints)
+  requireRole(["lgu", "super-admin"]),
+  wrap(complaintController.getFalsecomplaints)
 );
 
 router.get(
   "/false-reports/statistics",
   authenticateUser,
-  requireRole(["complaint-coordinator", "super-admin"]),
-  wrap(complaintController.getFalseComplaintStatistics)
+  requireRole(["lgu", "super-admin"]),
+  wrap(complaintController.getFalsecomplaintStatistics)
 );
+
 
 module.exports = router;

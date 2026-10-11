@@ -8,7 +8,7 @@ class ComplaintController {
     this.complaintService = new ComplaintService();
   }
 
-  async createComplaint(req, res) {
+  async createcomplaint(req, res) {
     const { user } = req;
     const complaintData = req.body;
     const token = req.headers.authorization; // Get token from headers
@@ -19,54 +19,89 @@ class ComplaintController {
       files = req.files.evidenceFiles;
     }
 
-    const complaint = await this.complaintService.createComplaint(
+    const complaint = await this.complaintService.createcomplaint(
       user.id,
       complaintData,
       files,
       token
     );
 
+    // Store for cache update (used by route middleware)
+    res.locals.complaint = complaint;
+
     const response = {
       success: true,
       data: complaint,
-      message: "Complaint submitted successfully",
+      message: "complaint submitted successfully",
     };
 
     if (
-      (complaint.department_r && complaint.department_r.length > 0) ||
+      (complaint.departments && complaint.departments.length > 0) ||
       complaint.assigned_coordinator_id
     ) {
       response.workflow = {
         auto_assigned: Boolean(
-          complaint.department_r && complaint.department_r.length > 0
+          complaint.departments && complaint.departments.length > 0
         ),
         coordinator_assigned: Boolean(complaint.assigned_coordinator_id),
         workflow_status: complaint.workflow_status,
       };
     }
 
+
     res.status(201).json(response);
   }
 
   /**
-   * Cancel complaint
+   * Get coordinator stats
    */
-  async cancelComplaint(req, res) {
-    const { id: complaintId } = req.params;
-    const { reason } = req.body;
-    const userId = req.user.id;
+  async getCoordinatorStats(req, res) {
+    try {
+      const stats = await this.complaintService.getcomplaintStats(req.user);
 
-    const result = await this.complaintService.cancelComplaint(
-      complaintId,
-      userId,
-      reason
-    );
-    res.json({
-      success: true,
-      message: "Complaint cancelled successfully",
-      data: result,
-    });
+      // Map to dashboard expected format
+      const dashboardStats = {
+        incoming: stats.byStatus?.submitted || 0,
+        unverified: stats.byStatus?.submitted || 0, // In this flow, submitted is unverified
+        assigned: (stats.byStatus?.verified || 0) + (stats.byStatus?.under_review || 0),
+        escalated: (stats.byPriority?.urgent || 0) + (stats.byPriority?.critical || 0)
+      };
+
+      res.json({ success: true, data: dashboardStats });
+    } catch (error) {
+      console.error("[complaintController] getCoordinatorStats error:", error.message);
+      res.status(500).json({ success: false, error: "Failed to fetch coordinator stats" });
+    }
   }
+
+  /**
+   * Get review queue
+   */
+  async getReviewQueue(req, res) {
+    try {
+      // Re-use getcomplaints logic but ensure we filter for relevant status
+      // Use req.query directly as getcomplaints handles pagination/filtering
+      const { user } = req;
+      // Force status filter if not provided, or ensure it's within coordinator scope
+      // [MODIFIED] User requested to show ALL complaints, so we remove the default "pending review" filter.
+      // [FIX] Force-clear status if it's "pending review" (which returns 0 results for LGU usually)
+      // or if it's "undefined"/"null" string from some clients.
+      if (req.query.status === "pending review" || req.query.status === "null" || req.query.status === "undefined") {
+        console.log("[DEBUG] complaintController: Clearing 'pending review' filter.");
+        delete req.query.status;
+      }
+
+      console.log("[DEBUG] complaintController: getReviewQueue query:", req.query);
+
+      // Use getAllcomplaints instead of non-existent getcomplaints
+      const result = await this.complaintService.getAllcomplaints(req.query);
+      res.json(result);
+    } catch (error) {
+      console.error("[complaintController] getReviewQueue error:", error.message);
+      res.status(500).json({ success: false, error: "Failed to fetch review queue" });
+    }
+  }
+
 
   /**
    * Send reminder for complaint
@@ -85,7 +120,7 @@ class ComplaintController {
     });
   }
 
-  async getMyComplaints(req, res) {
+  async getMycomplaints(req, res) {
     const { user } = req;
     const token = req.headers.authorization;
     const options = {
@@ -96,7 +131,7 @@ class ComplaintController {
       token,
     };
 
-    const result = await this.complaintService.getUserComplaints(
+    const result = await this.complaintService.getUsercomplaints(
       user.id,
       options
     );
@@ -121,7 +156,7 @@ class ComplaintController {
     });
   }
 
-  async getComplaintById(req, res) {
+  async getcomplaintById(req, res) {
     const { user } = req;
     const { id } = req.params;
     const userRole = user.role || "citizen";
@@ -133,13 +168,13 @@ class ComplaintController {
     const token = req.headers.authorization;
     let complaint;
     if (userRole === "citizen") {
-      complaint = await this.complaintService.getComplaintById(
+      complaint = await this.complaintService.getcomplaintById(
         id,
         user.id,
         token
       );
     } else {
-      complaint = await this.complaintService.getComplaintById(id, null, token);
+      complaint = await this.complaintService.getcomplaintById(id, null, token);
     }
 
     res.json({
@@ -148,7 +183,7 @@ class ComplaintController {
     });
   }
 
-  async getAllComplaints(req, res) {
+  async getAllcomplaints(req, res) {
     const options = {
       page: req.query.page || 1,
       limit: req.query.limit || 20,
@@ -158,7 +193,7 @@ class ComplaintController {
       search: req.query.search,
     };
 
-    const result = await this.complaintService.getAllComplaints(options);
+    const result = await this.complaintService.getAllcomplaints(options);
     res.json({
       success: true,
       data: result.complaints,
@@ -171,21 +206,39 @@ class ComplaintController {
     });
   }
 
-  async updateComplaintStatus(req, res) {
+  async updatecomplaintStatus(req, res) {
     const { id } = req.params;
     const { status, priority, category, subcategory, notes } = req.body;
     const { user } = req;
 
-    const complaint = await this.complaintService.updateComplaintStatus(
+    const complaint = await this.complaintService.updatecomplaintStatus(
       id,
       { status, priority, category, subcategory, notes },
       user.id
     );
 
+
     res.json({
       success: true,
       data: complaint,
-      message: "Complaint status updated successfully",
+      message: "complaint status updated successfully",
+    });
+  }
+
+  async getcomplaintStatus(req, res) {
+    const { id } = req.params;
+    const token = req.headers.authorization;
+
+    // Re-use core service method to respect visibility rules
+    const complaint = await this.complaintService.getcomplaintById(id, null, token);
+
+    res.json({
+      success: true,
+      data: {
+        status: complaint.workflow_status,
+        priority: complaint.priority,
+        updated_at: complaint.updated_at
+      }
     });
   }
 
@@ -211,14 +264,15 @@ class ComplaintController {
       await this.complaintService.addEvidence(complaintId, files);
     }
 
-    const updated = await this.complaintService.updateComplaintStatus(
+    const updated = await this.complaintService.updatecomplaintStatus(
       complaintId,
-      status,
-      userRole === "citizen"
-        ? null
-        : resolution_notes || admin_notes || feedback || null,
+      {
+        status,
+        notes: resolution_notes || admin_notes || feedback || null
+      },
       userId
     );
+
 
     return res.json({ success: true, data: updated });
   }
@@ -241,12 +295,12 @@ class ComplaintController {
     });
   }
 
-  async transferComplaint(req, res) {
+  async transfercomplaint(req, res) {
     const { id } = req.params;
     const { from_department, to_department, reason } = req.body;
     const { user } = req;
 
-    const complaint = await this.complaintService.transferComplaint(
+    const complaint = await this.complaintService.transfercomplaint(
       id,
       from_department,
       to_department,
@@ -257,25 +311,25 @@ class ComplaintController {
     res.json({
       success: true,
       data: complaint,
-      message: "Complaint transferred successfully",
+      message: "complaint transferred successfully",
     });
   }
 
-  async getComplaintStats(req, res) {
+  async getcomplaintStats(req, res) {
     const filters = {
       department: req.query.department,
       dateFrom: req.query.date_from,
       dateTo: req.query.date_to,
     };
 
-    const stats = await this.complaintService.getComplaintStats(filters);
+    const stats = await this.complaintService.getcomplaintStats(filters);
     res.json({
       success: true,
       data: stats,
     });
   }
 
-  async getComplaintLocations(req, res) {
+  async getcomplaintLocations(req, res) {
     const {
       status,
       _type,
@@ -284,6 +338,7 @@ class ComplaintController {
       startDate,
       endDate,
       includeResolved = "true",
+      lightweight,
     } = req.query;
 
     // Map query params to service filters
@@ -294,21 +349,6 @@ class ComplaintController {
       : category
         ? [category]
         : [];
-    let departmentArray = Array.isArray(department)
-      ? department
-      : department
-        ? [department]
-        : [];
-
-    // ROLE-BASED FILTERING: Enforce department restrictions
-    const userRole = req.user?.role || "citizen";
-    const userDepartment = req.user?.department;
-
-    // LGU Admins and Officers can ONLY see their own department's data
-    if (["lgu-admin", "lgu-officer"].includes(userRole) && userDepartment) {
-      departmentArray = [userDepartment];
-    }
-
     // Process status filters - separate workflow_status and confirmation_status
     const workflowStatuses = [];
     const confirmationStatuses = [];
@@ -350,7 +390,6 @@ class ComplaintController {
         confirmationStatuses.length > 0 ? confirmationStatuses : undefined,
       category: categoryArray.length > 0 ? categoryArray : undefined,
       subcategory: req.query.subcategory || undefined,
-      department: departmentArray.length > 0 ? departmentArray : undefined,
       startDate: startDate || undefined,
       endDate: endDate || undefined,
       includeResolved: includeResolved === "true",
@@ -363,9 +402,9 @@ class ComplaintController {
       }
     });
 
-    const locations = await this.complaintService.getComplaintLocations(
-      serviceFilters
-    );
+    const locations = lightweight === "true"
+      ? await this.complaintService.getcomplaintLocationSlim(serviceFilters)
+      : await this.complaintService.getcomplaintLocations(serviceFilters);
 
     if (
       Array.isArray(locations) &&
@@ -381,41 +420,41 @@ class ComplaintController {
           "public",
           "data",
           "complaints",
-          "mock_complaints.json"
+          "mockcomplaints.json"
         );
         const raw = fs.readFileSync(mockPath, "utf8");
         const parsed = JSON.parse(raw);
         const complaints = Array.isArray(parsed) ? parsed : parsed?.complaints;
         const fallback = Array.isArray(complaints)
           ? complaints
-              .map((c) => {
-                const lat = Number.parseFloat(c.latitude);
-                const lng = Number.parseFloat(c.longitude);
-                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-                const departments = Array.isArray(c.department_r)
-                  ? c.department_r
-                  : c.department_r
-                    ? [c.department_r]
-                    : [];
-                return {
-                  id: c.id,
-                  title: c.title || null,
-                  status: c.workflow_status || "new",
-                  priority: c.priority || "medium",
-                  lat,
-                  lng,
-                  location: c.location_text || "",
-                  submittedAt: c.submitted_at || null,
-                  department: departments.length > 0 ? departments[0] : "Unknown",
-                  departments,
-                  secondaryDepartments: departments.length > 1 ? departments.slice(1) : [],
-                  type: c.category || "General",
-                  category: c.category || null,
-                  subcategory: c.subcategory || null,
-                  department_r: departments,
-                };
-              })
-              .filter(Boolean)
+            .map((c) => {
+              const lat = Number.parseFloat(c.latitude);
+              const lng = Number.parseFloat(c.longitude);
+              if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+              const departments = Array.isArray(c.departments)
+                ? c.departments
+                : c.departments
+                  ? [c.departments]
+                  : [];
+              return {
+                id: c.id,
+                title: c.title || null,
+                status: c.workflow_status || "new",
+                priority: c.priority || "medium",
+                lat,
+                lng,
+                location: c.location_text || "",
+                submittedAt: c.submitted_at || null,
+                department: departments.length > 0 ? departments[0] : "Unknown",
+                departments,
+                secondarydepartments: departments.length > 1 ? departments.slice(1) : [],
+                type: c.category || "General",
+                category: c.category || null,
+                subcategory: c.subcategory || null,
+                departments,
+              };
+            })
+            .filter(Boolean)
           : [];
 
         res.json({
@@ -425,6 +464,7 @@ class ComplaintController {
         });
         return;
       } catch (e) {
+        console.warn("[COMPLAINT_CTRL] Barangay insights fallback error:", e?.message || "Unknown error");
       }
     }
 
@@ -438,15 +478,16 @@ class ComplaintController {
   /**
    * Mark a complaint as false
    */
-  async markAsFalseComplaint(req, res) {
+  async markAsFalsecomplaint(req, res) {
     const { id } = req.params;
-    const { reason } = req.body;
+    const { reason, notes } = req.body;
     const { user } = req;
 
-    const result = await this.complaintService.markAsFalseComplaint(
+    const result = await this.complaintService.markAsFalsecomplaint(
       id,
       user.id,
-      reason
+      reason,
+      notes
     );
 
     if (!result.success) {
@@ -461,12 +502,12 @@ class ComplaintController {
    */
   async markAsDuplicate(req, res) {
     const { id } = req.params;
-    const { masterComplaintId } = req.body;
+    const { mastercomplaintId } = req.body;
     const { user } = req;
 
     const result = await this.complaintService.markAsDuplicate(
       id,
-      masterComplaintId,
+      mastercomplaintId,
       user.id
     );
 
@@ -480,11 +521,13 @@ class ComplaintController {
   /**
    * Upvote a complaint (Citizen "Me Too")
    */
-  async upvoteComplaint(req, res) {
+  async upvotecomplaint(req, res) {
     const { id } = req.params;
     const { user } = req;
 
-    const result = await this.complaintService.upvoteComplaint(id, user.id);
+    const result = await this.complaintService.upvotecomplaint(id, user.id);
+
+
     res.json(result);
   }
 
@@ -493,7 +536,7 @@ class ComplaintController {
    */
   async checkDuplicates(req, res) {
     // Feature Flag Check
-    const config = require("../config/app");
+    const config = require("../../../config/app");
     if (!config.features || !config.features.duplicateDetection) {
       return res.json({ success: true, data: [] });
     }
@@ -535,11 +578,11 @@ class ComplaintController {
   /**
    * Admin: Bulk Merge
    */
-  async bulkMergeComplaints(req, res) {
+  async bulkMergecomplaints(req, res) {
     const { id } = req.params; // Master ID
     const { childIds } = req.body;
 
-    const result = await this.complaintService.bulkMergeComplaints(
+    const result = await this.complaintService.bulkMergecomplaints(
       id,
       childIds
     );
@@ -549,9 +592,9 @@ class ComplaintController {
   /**
    * Get all false complaints
    */
-  async getFalseComplaints(req, res) {
+  async getFalsecomplaints(req, res) {
     const { limit } = req.query;
-    const result = await this.complaintService.getFalseComplaints({
+    const result = await this.complaintService.getFalsecomplaints({
       limit: limit ? parseInt(limit) : undefined,
     });
 
@@ -565,8 +608,8 @@ class ComplaintController {
   /**
    * Get false complaint statistics
    */
-  async getFalseComplaintStatistics(req, res) {
-    const result = await this.complaintService.getFalseComplaintStatistics();
+  async getFalsecomplaintStatistics(req, res) {
+    const result = await this.complaintService.getFalsecomplaintStatistics();
 
     if (!result.success) {
       return res.status(400).json(result);
@@ -596,6 +639,7 @@ class ComplaintController {
       files
     );
 
+
     res.json({
       success: true,
       message: "Assignment marked as complete successfully",
@@ -618,6 +662,7 @@ class ComplaintController {
       feedback
     );
 
+
     res.json({
       success: true,
       message: confirmed
@@ -630,10 +675,10 @@ class ComplaintController {
   /**
    * Get evidence files for a complaint (citizen and authorized roles)
    */
-  async getComplaintEvidence(req, res) {
+  async getcomplaintEvidence(req, res) {
     const id = req.params.id || req.params.complaintId;
     const { user } = req;
-    const files = await this.complaintService.getComplaintEvidence(id, user);
+    const files = await this.complaintService.getcomplaintEvidence(id, user);
     return res.json({ success: true, data: files });
   }
 
@@ -681,6 +726,130 @@ class ComplaintController {
       data: result,
       message: "Assignment created successfully",
     });
+  }
+
+  async getcomplaintHistory(req, res) {
+    const { id } = req.params;
+    const { user } = req;
+
+    // Check permission by fetching complaint with validation
+    // If citizen, userId ensures ownership check. If admin/officer, passed as null (role checks handled by middleware/service logic)
+    const checkUserId = user.role === "citizen" ? user.id : null;
+    await this.complaintService.getcomplaintById(id, checkUserId);
+
+    const history = await this.complaintService.getcomplaintHistory(id);
+    res.json({ success: true, data: history });
+  }
+
+  /**
+   * Get barangay insights for prioritization widget
+   * Returns volume, urgency, and recency scores per barangay
+   */
+  async getBarangayInsights(req, res) {
+    try {
+      // List of Digos City barangays
+      const BARANGAYS = [
+        "Aplaya", "Balabag", "Binaton", "Cogon", "Colorado", "Dawis",
+        "Dulangan", "Goma", "Igpit", "Kiagot", "Lungag", "Mahayahay",
+        "Matti", "Kapatagan (Rizal)", "Ruparan", "San Agustin",
+        "San Jose (Balutakay)", "San Miguel (Odaca)", "San Roque",
+        "Sinawilan", "Soong", "Tiguman", "Tres de Mayo",
+        "Zone 1 (Pob.)", "Zone 2 (Pob.)", "Zone 3 (Pob.)"
+      ];
+
+      const Database = require("../config/database");
+      const supabase = Database.getServiceClient();
+
+      // Fetch all relevant complaints (last 30 days for recency calculations)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 365); // Expanded to 365 days to show historical data logic
+
+      const { data: complaints, error } = await supabase
+        .from("complaints")
+        .select("id, location_text, priority, submitted_at, workflow_status")
+        .gte("submitted_at", thirtyDaysAgo.toISOString())
+        .not("workflow_status", "in", "(cancelled,rejected)");
+
+      if (error) throw error;
+
+      // Initialize barangay stats
+      const barangayStats = new Map();
+      BARANGAYS.forEach(name => {
+        barangayStats.set(name, {
+          name,
+          totalcomplaints: 0,
+          urgentCount: 0,
+          highCount: 0,
+          recentCount: 0 // Last 7 days
+        });
+      });
+
+      // Calculate date threshold for recency (7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      // Process each complaint
+      complaints?.forEach(complaint => {
+        const locationText = complaint.location_text?.toLowerCase() || "";
+
+        // Find matching barangay
+        for (const barangay of BARANGAYS) {
+          if (locationText.includes(barangay.toLowerCase())) {
+            const stats = barangayStats.get(barangay);
+            stats.totalcomplaints++;
+
+            // Count urgent/high priority
+            const priority = complaint.priority?.toLowerCase();
+            if (priority === "urgent") stats.urgentCount++;
+            else if (priority === "high") stats.highCount++;
+
+            // Count recent (last 7 days)
+            if (new Date(complaint.submitted_at) >= sevenDaysAgo) {
+              stats.recentCount++;
+            }
+
+            break; // Match first barangay only
+          }
+        }
+      });
+
+      // Calculate scores and sort by volume
+      const maxVolume = Math.max(...Array.from(barangayStats.values()).map(s => s.totalcomplaints), 1);
+
+      const barangays = Array.from(barangayStats.values())
+        .filter(s => s.totalcomplaints > 0) // Only show barangays with complaints
+        .map(stats => {
+          const volumeScore = Math.round((stats.totalcomplaints / maxVolume) * 100);
+          const urgencyScore = stats.totalcomplaints > 0
+            ? Math.round(((stats.urgentCount * 2 + stats.highCount) / stats.totalcomplaints) * 100)
+            : 0;
+          const recencyScore = stats.totalcomplaints > 0
+            ? Math.round((stats.recentCount / stats.totalcomplaints) * 100)
+            : 0;
+
+          return {
+            name: stats.name,
+            totalcomplaints: stats.totalcomplaints,
+            volumeScore: Math.min(volumeScore, 100),
+            urgencyScore: Math.min(urgencyScore, 100),
+            recencyScore: Math.min(recencyScore, 100)
+          };
+        })
+        .sort((a, b) => b.totalcomplaints - a.totalcomplaints)
+        .slice(0, 10); // Top 10 barangays
+
+      res.json({
+        success: true,
+        data: { barangays },
+        meta: {
+          period: "30 days",
+          lastUpdated: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error("[complaintController] getBarangayInsights error:", error.message);
+      res.status(500).json({ success: false, error: "Failed to fetch barangay insights" });
+    }
   }
 }
 

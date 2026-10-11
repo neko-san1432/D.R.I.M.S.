@@ -58,11 +58,11 @@ class ReminderService {
     try {
       const supabase = getServiceClient();
       // Get complaints that are assigned but haven't been worked on
-      const { data: assignedComplaints, error: assignedError } = await supabase
+      const { data: assignedcomplaints, error: assignedError } = await supabase
         .from("complaints")
         .select(`
           id, title, workflow_status, submitted_at, last_activity_at,
-          department_r, preferred_departments,
+          departments, preferred_departments,
           submitted_by, coordinator_notes
         `)
         .in("workflow_status", ["assigned", "in_progress"])
@@ -72,11 +72,11 @@ class ReminderService {
         return [];
       }
       // Get complaints that are pending review for too long
-      const { data: pendingComplaints, error: pendingError } = await supabase
+      const { data: pendingcomplaints, error: pendingError } = await supabase
         .from("complaints")
         .select(`
           id, title, workflow_status, submitted_at, last_activity_at,
-          department_r, preferred_departments,
+          departments, preferred_departments,
           submitted_by, coordinator_notes
         `)
         .eq("workflow_status", "new")
@@ -86,9 +86,9 @@ class ReminderService {
         return [];
       }
       // Combine and filter out recently reminded complaints
-      const allComplaints = [...(assignedComplaints || []), ...(pendingComplaints || [])];
+      const allcomplaints = [...(assignedcomplaints || []), ...(pendingcomplaints || [])];
       const complaintsNeedingReminders = [];
-      for (const complaint of allComplaints) {
+      for (const complaint of allcomplaints) {
         const lastReminder = await this.getLastReminder(complaint.id);
         const timeSinceLastReminder = lastReminder ?
           now.getTime() - new Date(lastReminder.reminded_at).getTime() :
@@ -161,7 +161,7 @@ class ReminderService {
     try {
       // console.log removed for security
       // Get department information
-      const departments = await this.getComplaintDepartments(complaint);
+      const departments = await this.getcomplaintdepartments(complaint);
       // Create reminder record
       await this.createReminderRecord(complaint.id, complaint.reminderLevel);
       // Send notifications to relevant parties
@@ -174,15 +174,15 @@ class ReminderService {
   /**
    * Get departments associated with a complaint
    */
-  async getComplaintDepartments(complaint) {
+  async getcomplaintdepartments(complaint) {
     const supabase = getServiceClient();
     const departments = [];
     // Get departments from department_r array
-    if (complaint.department_r && complaint.department_r.length > 0) {
+    if (complaint.departments && complaint.departments.length > 0) {
       const { data: deptData } = await supabase
         .from("departments")
         .select("id, name, code")
-        .in("code", complaint.department_r);
+        .in("code", complaint.departments);
       if (deptData) {
         departments.push(...deptData);
       }
@@ -234,23 +234,23 @@ class ReminderService {
   async sendReminderNotifications(complaint, departments, reminderLevel) {
     const reminderMessages = {
       first: {
-        title: "Complaint Reminder",
-        message: `Complaint "${complaint.title}" has been pending for 24+ hours and needs attention.`,
+        title: "complaint Reminder",
+        message: `complaint "${complaint.description?.slice(0, 100) || "Pending complaint"}" has been pending for 24+ hours and needs attention.`,
         priority: "warning"
       },
       second: {
-        title: "Urgent Complaint Reminder",
-        message: `Complaint "${complaint.title}" has been pending for 3+ days and requires immediate attention.`,
+        title: "Urgent complaint Reminder",
+        message: `complaint "${complaint.description?.slice(0, 100) || "Pending complaint"}" has been pending for 3+ days and requires immediate attention.`,
         priority: "urgent"
       },
       third: {
-        title: "Critical Complaint Reminder",
-        message: `Complaint "${complaint.title}" has been pending for 1+ week and needs urgent resolution.`,
+        title: "Critical complaint Reminder",
+        message: `complaint "${complaint.description?.slice(0, 100) || "Pending complaint"}" has been pending for 1+ week and needs urgent resolution.`,
         priority: "urgent"
       },
       final: {
-        title: "Final Complaint Reminder",
-        message: `Complaint "${complaint.title}" has been pending for 2+ weeks. This is the final reminder.`,
+        title: "Final complaint Reminder",
+        message: `complaint "${complaint.description?.slice(0, 100) || "Pending complaint"}" has been pending for 2+ weeks. This is the final reminder.`,
         priority: "urgent"
       }
     };
@@ -259,7 +259,7 @@ class ReminderService {
     // Notify complaint coordinator
     await this.notifyCoordinator(complaint, reminder);
     // Notify department admins
-    await this.notifyDepartmentAdmins(complaint, departments, reminder);
+    await this.notifydepartmentAdmins(complaint, departments, reminder);
     // Note: Citizens should NOT receive reminder notifications
     // Reminders are internal notifications for officers/admins to take action
     // Citizens are already aware of their complaint status through other notifications
@@ -273,7 +273,10 @@ class ReminderService {
       // Get coordinator users
       const { data: coordinators } = await supabase.auth.admin.listUsers();
       const coordinatorIds = coordinators?.users
-        ?.filter(user => user.raw_user_meta_data?.role === "complaint-coordinator")
+        ?.filter(user => {
+          const role = user.raw_user_meta_data?.role || "";
+          return role === "lgu" || role === "complaint-coordinator" || role.startsWith("lgu-");
+        })
         ?.map(user => user.id) || [];
       if (coordinatorIds.length > 0) {
 
@@ -301,14 +304,18 @@ class ReminderService {
   /**
    * Notify department admins
    */
-  async notifyDepartmentAdmins(complaint, departments, reminder) {
+  async notifydepartmentAdmins(complaint, departments, reminder) {
     try {
       const supabase = getServiceClient();
       for (const department of departments) {
         // Get department admin users
         const { data: allUsers } = await supabase.auth.admin.listUsers();
         const admins = allUsers?.users
-          ?.filter(user => user.raw_user_meta_data?.role === "lgu-admin" && user.raw_user_meta_data?.dpt === department.code)
+          ?.filter(user => {
+            const role = user.raw_user_meta_data?.role || "";
+            const isLgu = role === "lgu" || role === "lgu-admin" || role.startsWith("lgu-");
+            return isLgu && user.raw_user_meta_data?.dpt === department.code;
+          })
           ?.map(user => user.id) || [];
         if (admins.length > 0) {
 
@@ -320,7 +327,7 @@ class ReminderService {
               reminder.message,
               {
                 priority: reminder.priority,
-                link: `/lgu-admin/department-queue`,
+                link: `/assignments`,
                 metadata: {
                   complaint_id: complaint.id,
                   department: department.name,

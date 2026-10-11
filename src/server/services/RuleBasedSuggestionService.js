@@ -1,9 +1,9 @@
 const DepartmentRepository = require("../repositories/DepartmentRepository");
 const ComplaintRepository = require("../repositories/ComplaintRepository");
-const { getCategoryToDepartmentMapping, getKeywordBasedSuggestions } = require("../utils/departmentMapping");
+const { getCategoryTodepartmentMapping, getKeywordBasedSuggestions } = require("../utils/departmentMapping");
 
 /**
-* RuleBasedSuggestionService
+* ruleBasedSuggestionService
 * Lightweight, explainable suggestions (no ML) for routing
 */
 class RuleBasedSuggestionService {
@@ -14,16 +14,17 @@ class RuleBasedSuggestionService {
   }
   /**
   * Compute department and coordinator suggestions for a complaint
-  * @param {object} complaint - complaint record (title, descriptive_su, type, location_text)
+  * @param {object} complaint - complaint record (description, category, location_text)
   * @returns {object} suggestions
   */
   async computeSuggestions(complaint) {
-    const text = [complaint.title, complaint.descriptive_su, complaint.location_text]
+    // Use description as the primary text field (title column doesn't exist)
+    const text = [complaint.description, complaint.location_text]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
     // Get dynamic department mappings
-    const typeRules = await getCategoryToDepartmentMapping();
+    const typeRules = await getCategoryTodepartmentMapping();
     const keywordRules = await getKeywordBasedSuggestions();
     // Seed scores from type
     const scores = new Map(); // dept -> { score, reasons: [] }

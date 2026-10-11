@@ -1,0 +1,698 @@
+/* --- New Citizen Dashboard Layout --- */
+.dash-new-container {
+    padding: var(--space-2) var(--space-5) var(--space-5);
+    max-width: 1200px;
+    margin: 0 auto;
+    color: var(--text-color);
+}
+
+.dash-welcome {
+    margin-bottom: var(--space-8);
+}
+.dash-welcome h2 {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-1) 0;
+}
+.dash-welcome p {
+    color: var(--text-muted);
+    opacity: 0.9;
+    font-size: var(--font-size-lg);
+    margin: 0;
+}
+
+.dash-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-6);
+    margin-bottom: var(--space-8);
+}
+
+.dash-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-5);
+    border-radius: var(--radius-xl);
+    text-decoration: none;
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+    box-shadow: var(--shadow-sm);
+}
+.dash-card:hover, .action-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    text-decoration: none !important;
+}
+
+.dash-card-blue {
+    background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+    color: var(--text-on-primary);
+}
+.dash-card-blue .dash-card-icon {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+.dash-card-blue p {
+    color: rgba(255, 255, 255, 0.95);
+}
+.dash-card-blue svg {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dash-card-dark {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--gray-200);
+    color: var(--text-color);
+}
+.dash-card-dark .dash-card-icon {
+    background-color: var(--gray-100);
+}
+.dash-card-dark p {
+    color: var(--text-muted);
+}
+.dash-card-dark svg {
+    color: var(--gray-400);
+}
+
+.dash-card-dark .dash-card-text h3 {
+    color: var(--text-color);
+}
+
+html.dark .dash-card-dark {
+    background-color: var(--bg-surface);
+    border-color: var(--gray-700);
+}
+
+.dash-card-content {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+.dash-card-icon {
+    font-size: var(--font-size-2xl);
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    transition: transform var(--transition-normal);
+}
+.dash-card:hover .dash-card-icon {
+    transform: scale(1.1);
+}
+.dash-card-text h3 {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    margin: 0 0 2px 0;
+}
+.dash-card-text p {
+    font-size: var(--font-size-sm);
+    margin: 0;
+}
+.dash-card-arrow svg {
+    width: 24px;
+    height: 24px;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+.dash-mid-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+}
+
+.dash-box {
+    background: var(--bg-surface);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-xl);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-sm);
+}
+
+.dash-box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.dash-box-header h3, .dash-box-title, .dash-box-header-title h3 {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    margin: 0;
+    color: var(--text-color, var(--gray-900));
+}
+
+.dash-box-metrics {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+.dash-box-metrics span {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+.metrics-icon {
+    width: 16px;
+    height: 16px;
+}
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+}
+.dot.bg-blue { background-color: var(--primary-400); }
+.dot.bg-green { background-color: var(--success-400); }
+
+.dash-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 160px;
+    background: rgba(249, 250, 251, 0.5);
+    border: 1px dashed var(--gray-300);
+    border-radius: var(--radius-lg);
+    padding: var(--space-8);
+    text-align: center;
+}
+html.dark .dash-empty-state {
+    background: rgba(31, 41, 55, 0.5);
+    border-color: var(--gray-700);
+}
+
+.dash-empty-state h4 {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    margin: 0 0 4px 0;
+    color: var(--text-color);
+}
+.dash-empty-state p {
+    color: var(--text-muted);
+    margin: 0 0 var(--space-4) 0;
+}
+
+.dash-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--primary-500);
+    color: white;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+    transition: background-color var(--transition-fast);
+}
+.dash-btn-primary:hover {
+    background: var(--primary-600);
+}
+.dash-btn-primary svg {
+    width: 16px;
+    height: 16px;
+}
+
+.dash-box-header-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+}
+.dash-link-icon {
+    color: var(--text-muted);
+    transition: color var(--transition-fast);
+}
+.dash-link-icon:hover {
+    color: var(--text-color);
+}
+.dash-link-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.dash-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+}
+
+.dash-category-btn {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    border: 1px solid var(--gray-200);
+    background: var(--bg-surface);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
+    color: var(--text-color);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+    transition: background-color var(--transition-fast);
+}
+.dash-category-btn:hover {
+    background: var(--bg-surface-hover);
+}
+
+.dash-category-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    border: 1px solid var(--gray-200);
+    background: var(--gray-50);
+    padding: var(--space-3) var(--space-6);
+    border-radius: var(--radius-lg);
+    color: var(--text-color);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+    transition: background-color var(--transition-fast);
+}
+html.dark .dash-category-more {
+    background: rgba(31, 41, 55, 1);
+}
+.dash-category-more:hover {
+    background: rgba(243, 244, 246, 1);
+}
+
+.dash-divider {
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    color: var(--text-muted, #9ca3af);
+}
+.dash-divider svg {
+    width: 20px;
+    height: 20px;
+}
+
+.cat-icon { font-size: 1.25rem; }
+.cat-icon-gray { color: var(--text-muted, #6b7280); font-size: 1.25rem; }
+
+/* Quick Action Icons Fix for Dark Mode */
+
+/* --- Dark Mode Text Contrast Fixes --- */
+html.dark .dash-welcome h2,
+html.dark .dash-welcome p,
+html.dark .dash-box-header h3,
+html.dark .dash-box-title,
+html.dark .dash-box-header-title h3,
+html.dark .dash-empty-state h4,
+html.dark .dash-box-metrics strong {
+    color: #f3f4f6 !important; /* light gray for high visibility */
+}
+
+html.dark .dash-empty-state p,
+html.dark .dash-box-metrics {
+    color: #9ca3af !important; /* mid gray for secondary text */
+}
+
+html.dark .dash-box {
+    background-color: var(--dash-dark-bg, #1f2937);
+    border-color: var(--dash-dark-border, #374151);
+}
+
+html.dark .dash-category-btn {
+    background-color: var(--dash-dark-bg, #1f2937);
+    border-color: var(--dash-dark-border, #374151);
+    color: #e5e7eb !important;
+}
+
+html.dark .dash-category-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+html.dark .dash-empty-state {
+    border-color: #374151;
+    background: rgba(17, 24, 39, 0.5); /* slightly darker empty state */
+}
+
+html.dark .cat-icon-gray {
+    color: #9ca3af !important;
+}
+
+html.dark .bg-blue-100 {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+html.dark .text-blue-600 {
+    color: #60a5fa !important;
+    /* blue-400 */
+}
+
+html.dark .group:hover .bg-blue-200 {
+    background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+html.dark .bg-purple-100 {
+    background-color: rgba(147, 51, 234, 0.15) !important;
+}
+
+html.dark .text-purple-600 {
+    color: #a855f7 !important;
+    /* purple-500 */
+}
+
+html.dark .group:hover .bg-purple-200 {
+    background-color: rgba(147, 51, 234, 0.25) !important;
+}
+
+/* Fix Quick Action Button Backgrounds */
+html.dark .bg-gray-50 {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html.dark .hover\:bg-gray-100:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Fix Text Colors in Quick Actions */
+html.dark h4.text-gray-900 {
+    color: #e5e7eb !important;
+    /* gray-200 */
+}
+
+html.dark p.text-gray-500 {
+    color: #9ca3af !important;
+    /* gray-400 */
+}
+
+/* Fix SVG Stroke Colors if needed */
+html.dark .text-blue-600 svg,
+html.dark .text-purple-600 svg {
+    stroke: currentColor;
+}
+/* Fix Tailwind JS overrides for empty states */
+html.dark .text-gray-500,
+html.dark .text-gray-400,
+html.dark .text-gray-800,
+html.dark .text-gray-900,
+html.dark .text-gray-700 {
+    color: #e5e7eb !important;
+}
+html.dark .bg-gray-50,
+html.dark .bg-orange-50,
+html.dark .bg-green-50,
+html.dark .bg-blue-50 {
+    background-color: var(--gray-800, #1f2937) !important;
+    border-color: var(--gray-700, #374151) !important;
+}
+
+/* Refined override for specific JS injected empty states only */
+html.dark body .bg-gray-50.text-gray-500 {
+    background-color: transparent !important;
+    border: 1px dashed rgba(255, 255, 255, 0.15) !important;
+    color: #e5e7eb !important;
+}
+html.dark body .text-gray-500 p {
+    color: #e5e7eb !important;
+}
+
+/* Fix More button contrast */
+html.dark .dash-category-more {
+    background: transparent !important;
+    border-color: rgba(255,255,255,0.15) !important;
+    color: #e5e7eb !important;
+}
+html.dark .dash-category-more:hover {
+    background: rgba(255,255,255,0.1) !important;
+}
+html.dark .dash-category-more .cat-icon-gray {
+    color: #e5e7eb !important;
+}
+
+/* Keep shared header controls consistent across pages */
+html body .menu-toggle {
+    display: flex !important;
+}
+
+/* Mobile Bottom Navigation Styles */
+.dash-bottom-nav {
+    display: none; /* hidden on desktop */
+}
+
+@media (max-width: 1024px) {
+    /* Show bottom nav on mobile/tablet */
+    .dash-bottom-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        background: var(--dash-dark-bg, #1f2937); /* dark like the mockup */
+        border-top: 1px solid var(--dash-dark-border, #374151);
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 64px;
+        z-index: 100;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    
+    html.dark .dash-bottom-nav,
+    body.tactical-mode .dash-bottom-nav {
+        background: #0f172a; /* matching dark header/background */
+        border-top: 1px solid #1e293b;
+    }
+
+    .nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #64748b;
+        text-decoration: none;
+        width: 100%;
+        height: 100%;
+        transition: color 0.2s;
+    }
+
+    .nav-item:hover, .nav-item:active {
+        color: #94a3b8;
+    }
+
+    .nav-item.active {
+        color: #3b82f6; /* blue accent */
+        border-bottom: 2px solid #3b82f6; /* line indicator */
+    }
+
+    .nav-icon {
+        width: 24px;
+        height: 24px;
+        margin-top: 4px;
+    }
+
+    /* Create space for the bottom nav in the main wrapper */
+    .dashboard-main-wrapper {
+        padding-bottom: 80px !important;
+    }
+
+    /* Hide sidebar explicitly on mobile since we have bottom nav */
+    #sidebar {
+        display: none !important;
+    }
+}
+
+/* ============================ */
+/* Merged LGU-specific overrides (Scoped) */
+/* Source: public/css/pages/lguOverride.css (merged 2026-04-19) */
+
+.lgu-dashboard .app-container {
+    background: linear-gradient(180deg, var(--lgubg-1) 0%, var(--lgubg-2) 100%) !important;
+}
+
+/* Status bar */
+.lgu-dashboard .dashboard-status-bar {
+    background: rgba(255,255,255,0.02) !important;
+    border-radius: 10px !important;
+    padding: 12px !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 6px 18px rgba(2,6,23,0.6) !important;
+    border: 1px solid rgba(255,255,255,0.02) !important;
+}
+
+/* Stat cards (top row) */
+.lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card {
+    min-height: 92px;
+    padding: 18px !important;
+    border-radius: 14px !important;
+    box-shadow: var(--lgucard-shadow) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 14px !important;
+}
+.lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card .dash-card-text h3 {
+    font-size: 28px !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+}
+.lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card .dash-card-text p { color: rgba(255,255,255,0.9) !important; font-weight:600 !important }
+
+/* Ensure the number and label stack vertically inside stat cards */
+.lgu-dashboard .dash-card-text { display: flex !important; flex-direction: column !important; align-items: flex-start !important; }
+
+/* Per-stat gradients */
+.lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card:nth-child(1) { background: linear-gradient(180deg,#60a5fa,#2563eb) !important }
+.lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card:nth-child(2) { background: linear-gradient(180deg,#ef4444,#dc2626) !important }
+.lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card:nth-child(3) { background: linear-gradient(180deg,#f59e0b,#f97316) !important }
+.lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card:nth-child(4) { background: linear-gradient(180deg,#a78bfa,#7c3aed) !important }
+
+/* Icon container inside stat cards */
+.lgu-dashboard .dashboard-row .dash-card > span {
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 12px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(255,255,255,0.12) !important;
+    box-shadow: 0 6px 18px rgba(2,6,23,0.45) inset !important;
+}
+
+/* Alerts card */
+.lgu-dashboard .high-priority-card {
+    border-radius: 14px !important;
+    border: 2px solid rgba(220,38,38,0.6) !important;
+    background: linear-gradient(180deg,#0f172a,#0b1220) !important;
+    box-shadow: 0 8px 30px rgba(2,6,23,0.6) !important;
+    padding: 18px !important;
+}
+.lgu-dashboard .high-priority-card h3 { color: #ef4444 !important; }
+.lgu-dashboard .high-priority-card .alert-card { background: rgba(255,255,255,0.02) !important; color: rgba(255,255,255,0.92) !important; padding: 12px !important; border-radius: 10px !important; box-shadow:none !important }
+
+/* Chart containers */
+.lgu-dashboard .dash-card canvas { background: transparent !important; }
+.lgu-dashboard .category-chart-wrap { height: 340px !important; }
+.lgu-dashboard .complaints-chart-wrap { height: 140px !important; }
+.lgu-dashboard .nlp-chart-wrap { height: 140px !important; }
+
+/* Quick action buttons */
+.lgu-dashboard .quick-actions .dash-card.dash-card-blue { display: inline-flex !important; align-items:center !important; justify-content:center !important; border-radius: 12px !important; box-shadow: 0 10px 30px rgba(2,6,23,0.45) !important }
+
+/* Chart legend neutralization */
+.lgu-dashboard .chart-legend > span { background: transparent !important; box-shadow: none !important; padding: 0 !important; display:flex !important; align-items:center !important; gap:8px !important }
+.lgu-dashboard .chart-legend > span > span { width: 12px !important; height: 12px !important; border-radius:50% !important; display:inline-block !important }
+
+/* Misc tweaks */
+.lgu-dashboard .dash-box { border-radius: 14px !important }
+.lgu-dashboard .dash-box h3 { color: rgba(255,255,255,0.95) !important }
+
+@media (max-width: 900px) {
+    .lgu-dashboard .dashboard-grid > .dashboard-row:nth-of-type(1) .dash-card { grid-column: span 1 !important }
+}
+
+/* Fix label orientation and header spacing for LGU dashboard */
+.high-priority-title {
+    writing-mode: horizontal-tb !important;
+    transform: none !important;
+    display: block !important;
+    font-size: 1.125rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 12px 0 !important;
+    color: #ef4444 !important;
+}
+
+.dash-box-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+}
+.dash-box-header h3 { margin: 0 !important; font-size: 1.125rem !important; color: rgba(255,255,255,0.95) !important }
+.dash-box-link { color: #3b82f6 !important; font-size: 0.95em !important; margin-left: auto !important }
+
+/* Safety: neutralize any accidental vertical writing mode on card headers */
+.dash-card h3, .dash-box-title h3 { writing-mode: horizontal-tb !important; transform: none !important; white-space: normal !important }
+
+
+/* Remove legacy vertical side-labels that some pages used */
+.high-priority-card::before,
+.high-priority-card::after,
+.high-priority-card .vertical-label,
+.high-priority-card .side-label,
+.high-priority-card .headline-vertical {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    transform: none !important;
+    content: none !important;
+}
+
+.high-priority-card { position: relative !important; overflow: visible !important; }
+
+/* If a vertical pseudo-label was added to the dashboard row, hide it for the alerts row */
+.dashboard-grid > .dashboard-row:nth-of-type(2)::before,
+.dashboard-grid > .dashboard-row:nth-of-type(2)::after {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    content: none !important;
+    transform: none !important;
+}
+
+/* Fallback: hide common class names used for side labels */
+.dashboard-grid .vertical-label,
+.dashboard-grid .side-label,
+.dashboard-grid .headline-vertical {
+    display: none !important;
+}
+
+
+
+/* --- Tactical Dashboard Header Controls --- */
+.tactical-container .filter-select {
+    background: rgba(15, 23, 42, 0.8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #e2e8f0 !important;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.tactical-container .filter-select:hover {
+    background: rgba(30, 41, 59, 0.9) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+.tactical-container .btn-filter {
+    background: #2563eb !important;
+    color: white !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
+    box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.39) !important;
+    transition: all 0.2s ease;
+}
+
+.tactical-container .btn-filter:hover {
+    background: #3b82f6 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.23) !important;
+}
+
+.tactical-header-container {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+}
+
+.tactical-header {
+    letter-spacing: -0.01em;
+}
+
+
+.tactical-subtitle {
+    display: block;
+}
+

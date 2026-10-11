@@ -1,5 +1,5 @@
 /**
- * Complaint Location Picker - Simple Map for Location Selection
+ * complaint Location Picker - Simple Map for Location Selection
  * Dedicated map component for complaint form without restrictive zoom limits
  */
 // Global map reference for complaint form
@@ -10,7 +10,7 @@ window.complaintMap = null;
  * @param {Object} options - Map configuration options
  * @returns {L.Map} - Leaflet map instance
  */
-async function initializeComplaintLocationPicker(
+async function initializecomplaintLocationPicker(
   containerId = "complaint-map",
   options = {}
 ) {
@@ -32,55 +32,43 @@ async function initializeComplaintLocationPicker(
       // Return a promise that resolves when the map is visible
       return new Promise((resolve) => {
         setTimeout(async () => {
-          const map = await initializeComplaintLocationPicker(containerId, options);
+          const map = await initializecomplaintLocationPicker(containerId, options);
           resolve(map);
         }, 500); // Check every 500ms
       });
     }
-    // Default map options - restricted to Digos City boundaries
+    // Default map options
     const defaultOptions = {
-      center: [6.7497, 125.357], // Digos City, Philippines (more accurate center)
+      center: [6.7497, 125.357], // Digos City, Philippines
       zoom: 13,
       zoomControl: true,
       preferCanvas: true,
       scrollWheelZoom: true,
-      doubleClickZoom: true,
-      boxZoom: true,
-      keyboard: true,
-      dragging: true,
-      worldCopyJump: false,
-      minZoom: 10, // Restrict minimum zoom to keep focus on Digos City
+      minZoom: 11,
       maxZoom: 18,
-      // Restrict map bounds to Digos City area
-      maxBounds: [
-        [6.65, 125.2], // Southwest corner
-        [7.0, 125.5], // Northeast corner
-      ],
-      maxBoundsViscosity: 1.0, // Prevent panning outside bounds
+      worldCopyJump: false
     };
+
     // Merge with provided options
     const mapOptions = { ...defaultOptions, ...options };
+
     // Create map
     const map = L.map(containerId, {
       zoomControl: mapOptions.zoomControl,
       preferCanvas: mapOptions.preferCanvas,
       scrollWheelZoom: mapOptions.scrollWheelZoom,
-      doubleClickZoom: mapOptions.doubleClickZoom,
-      boxZoom: mapOptions.boxZoom,
-      keyboard: mapOptions.keyboard,
-      dragging: mapOptions.dragging,
-      worldCopyJump: mapOptions.worldCopyJump,
       minZoom: mapOptions.minZoom,
       maxZoom: mapOptions.maxZoom,
-      maxBounds: mapOptions.maxBounds,
-      maxBoundsViscosity: mapOptions.maxBoundsViscosity || 1.0,
+      dragging: true
     });
 
     // Ensure map container handles inputs
     mapContainer.style.zIndex = "1";
     mapContainer.style.pointerEvents = "auto";
+
     // Set initial view
     map.setView(mapOptions.center, mapOptions.zoom);
+
     // Add OpenStreetMap tile layer
     const osmLayer = L.tileLayer(
       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -88,8 +76,8 @@ async function initializeComplaintLocationPicker(
         attribution: "© OpenStreetMap contributors",
         maxZoom: 18,
       }
-    );
-    osmLayer.addTo(map);
+    ).addTo(map);
+
     // Add satellite layer option
     const satelliteLayer = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -98,57 +86,120 @@ async function initializeComplaintLocationPicker(
         maxZoom: 18,
       }
     );
-    // Add layer control
+
     const baseLayers = {
       "Street Map": osmLayer,
-      Satellite: satelliteLayer,
+      "Satellite": satelliteLayer,
     };
-    const _layerControl = L.control
-      .layers(
-        baseLayers,
-        {},
-        {
-          position: "topright",
-        }
-      )
-      .addTo(map);
 
-    // Load and display Digos City boundaries
+    L.control.layers(baseLayers, {}, { position: "topright" }).addTo(map);
+
+    // Add Exit Fullscreen button (hidden by default via CSS)
+    const exitBtn = document.createElement("button");
+    exitBtn.className = "exit-fullscreen-btn";
+    exitBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M18 6L6 18M6 6l12 12"></path>
+      </svg>
+      Exit Fullscreen
+    `;
+    mapContainer.appendChild(exitBtn);
+
+    const toggleFullscreen = () => {
+      const isFullscreen = mapContainer.classList.toggle("fullscreen");
+      document.body.style.overflow = isFullscreen ? "hidden" : "";
+      setTimeout(() => map.invalidateSize(), 300);
+    };
+
+    exitBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleFullscreen();
+    };
+
+    // Add Custom Fullscreen Control (More prominent)
+    const FullscreenControl = L.Control.extend({
+      options: { position: "topleft" },
+      onAdd: function() {
+        const btn = L.DomUtil.create("button", "map-fullscreen-btn");
+        btn.title = "Fullscreen Mode";
+        btn.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+          </svg>
+        `;
+        L.DomEvent.disableClickPropagation(btn);
+        btn.onclick = toggleFullscreen;
+        return btn;
+      }
+    });
+    map.addControl(new FullscreenControl());
+
+    // Load and display Digos City boundaries & Mask
     try {
-      const boundaryResponse = await fetch("/api/boundaries");
-      if (boundaryResponse.ok) {
-        const brgyData = await boundaryResponse.json();
-        if (Array.isArray(brgyData)) {
-          // Store boundaries globally for validation
-          window.complaintFormBoundaries = brgyData;
+      // 1. Load full city boundary for the mask
+      const cityResponse = await fetch("/api/public/digos-boundary");
+      if (cityResponse.ok) {
+        const cityGeoJSON = await cityResponse.json();
+        
+        // Add city outline (thick)
+        L.geoJSON(cityGeoJSON, {
+          style: {
+            color: "#2563eb",
+            weight: 4,
+            opacity: 0.9,
+            fillOpacity: 0,
+            dashArray: "5, 10"
+          },
+          interactive: false
+        }).addTo(map);
 
-          // Add each barangay boundary to the map
-          brgyData.forEach((barangay) => {
-            if (barangay.geojson) {
-              const geojsonLayer = L.geoJSON(barangay.geojson, {
-                style: {
-                  color: "#3388ff",
-                  weight: 2,
-                  opacity: 0.8,
-                  fillOpacity: 0.1,
-                  fillColor: "#3388ff",
-                },
-              });
-              geojsonLayer.addTo(map);
-            }
-          });
-
-          // Fit map to boundaries
-          if (brgyData.length > 0) {
-            const allFeatures = brgyData
-              .filter((b) => b.geojson)
-              .map((b) => b.geojson);
-            const bounds = L.geoJSON(allFeatures).getBounds();
-            if (bounds.isValid()) {
-              map.fitBounds(bounds, { padding: [20, 20] });
-            }
-          }
+        // Add "Mask" layer (Dim areas outside Digos)
+        // This creates a global inverted polygon
+        const worldCoords = [
+          [-90, -180], [-90, 180], [90, 180], [90, -180], [-90, -180]
+        ];
+        
+        // Extract coordinates from cityGeoJSON
+        let cityCoords = [];
+        if (cityGeoJSON.geometry.type === "Polygon") {
+          cityCoords = cityGeoJSON.geometry.coordinates;
+        } else if (cityGeoJSON.geometry.type === "MultiPolygon") {
+          // Flatten into multiple rings if needed, but for mask we just want holes
+          cityCoords = cityGeoJSON.geometry.coordinates.map(p => p[0]);
         }
+
+        // Create the mask with holes for Digos
+        L.polygon([worldCoords, ...cityCoords], {
+          fillColor: "#000",
+          fillOpacity: 0.35,
+          color: "none",
+          interactive: false
+        }).addTo(map);
+
+        // Fit map to city
+        const cityBounds = L.geoJSON(cityGeoJSON).getBounds();
+        map.fitBounds(cityBounds, { padding: [20, 20] });
+      }
+
+      // 2. Load barangay boundaries for inner details
+      const brgyResponse = await fetch("/api/public/boundaries");
+      if (brgyResponse.ok) {
+        const brgyData = await brgyResponse.json();
+        window.complaintFormBoundaries = brgyData;
+
+        brgyData.forEach((barangay) => {
+          if (barangay.geojson) {
+            L.geoJSON(barangay.geojson, {
+              style: {
+                color: "#3b82f6",
+                weight: 1,
+                opacity: 0.4,
+                fillOpacity: 0.05,
+              },
+              interactive: false
+            }).addTo(map);
+          }
+        });
       }
     } catch (error) {
       console.warn("[COMPLAINT_MAP] Failed to load boundaries:", error);
@@ -179,6 +230,43 @@ async function initializeComplaintLocationPicker(
  */
 function setupLocationPicker(map) {
   if (!map) return;
+
+  async function notify(type, message) {
+    try {
+      const mod = await import("../../components/toast.js");
+      const showMessage = mod?.default;
+      if (typeof showMessage === "function") {
+        showMessage(type, message);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Last resort: make sure user sees *something*
+    try {
+      // eslint-disable-next-line no-alert -- Fallback only if toast fails
+      alert(message);
+    } catch {
+      // ignore
+    }
+  }
+
+  // Prevent toast spam/"loop" feeling when users retry quickly on mobile.
+  // Keyed by a stable string so the same problem only notifies once per cooldown window.
+  const notifyCooldowns = new Map();
+  function notifyOnce(key, type, message, cooldownMs = 10000) {
+    const now = Date.now();
+    const lastShownAt = notifyCooldowns.get(key) || 0;
+    if (now - lastShownAt < cooldownMs) return;
+    notifyCooldowns.set(key, now);
+    notify(type, message);
+  }
+
+  function isLocalhostHost(hostname) {
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  }
+
   // Get hidden input fields
   const latInput = document.getElementById("latitude");
   const lngInput = document.getElementById("longitude");
@@ -188,7 +276,7 @@ function setupLocationPicker(map) {
     locationInput.setAttribute("aria-live", "polite");
     locationInput.setAttribute(
       "title",
-      "Move the map or drag the pin to change the address."
+      "Tap the map or drag the pin to change the address."
     );
   }
   if (!latInput || !lngInput) {
@@ -196,10 +284,42 @@ function setupLocationPicker(map) {
     return;
   }
   let marker = null;
-  let isUserInteracting = false;
-  // Create initial marker at map center (using divIcon for CSP compliance)
-  const initialCenter = map.getCenter();
-  marker = L.marker([initialCenter.lat, initialCenter.lng], {
+  let lastValidLatLng = null;
+
+  // Reverse geocode: throttle + cache to avoid Nominatim 429s
+  const geocodeCache = new Map();
+  const GEOCODE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+  const GEOCODE_DEBOUNCE_MS = 650;
+  const GEOCODE_MIN_INTERVAL_MS = 1200;
+  let geocodeCooldownUntil = 0;
+  let lastGeocodeStartedAt = 0;
+  let geocodeDebounceTimer = null;
+  let geocodeAbortController = null;
+  let latestGeocodeKey = null;
+
+  function getGeocodeKey(lat, lng) {
+    return `${parseFloat(lat).toFixed(5)},${parseFloat(lng).toFixed(5)}`;
+  }
+
+  function getCachedAddress(cacheKey) {
+    const entry = geocodeCache.get(cacheKey);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > GEOCODE_CACHE_TTL_MS) {
+      geocodeCache.delete(cacheKey);
+      return null;
+    }
+    return entry.value;
+  }
+  // Create initial marker at existing coordinates or map center (using divIcon for CSP compliance)
+  const savedLat = parseFloat(latInput.value);
+  const savedLng = parseFloat(lngInput.value);
+  const hasSavedCoords = !isNaN(savedLat) && !isNaN(savedLng);
+
+  const initialPos = hasSavedCoords ? { lat: savedLat, lng: savedLng } : map.getCenter();
+
+  lastValidLatLng = { lat: initialPos.lat, lng: initialPos.lng };
+
+  marker = L.marker([initialPos.lat, initialPos.lng], {
     draggable: true,
     zIndexOffset: 1000, // Ensure marker is always on top
     icon: L.divIcon({
@@ -209,6 +329,10 @@ function setupLocationPicker(map) {
       iconAnchor: [18, 36],
     }),
   }).addTo(map);
+
+  if (hasSavedCoords) {
+    map.setView([savedLat, savedLng], 16);
+  }
 
   // Boundary validation function
   async function validateCoordinates(lat, lng) {
@@ -301,6 +425,10 @@ function setupLocationPicker(map) {
     const isValid = await validateCoordinates(lat, lng);
     coordinatesValid = isValid;
 
+    if (isValid) {
+      lastValidLatLng = { lat, lng };
+    }
+
     // Update submit button state based on coordinate validity
     updateSubmitButtonState();
 
@@ -362,40 +490,108 @@ function setupLocationPicker(map) {
     const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     locationInput.value = coordString;
 
-    try {
-      // console.log removed for security
-      // Use server-side reverse geocoding endpoint to avoid CORS issues
-      const response = await fetch(
-        `/api/reverse-geocode?lat=${lat}&lng=${lng}`
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      // console.log removed for security
-      if (data && data.display_name) {
-        locationInput.value = data.display_name;
-        // console.log removed for security
-      } else {
-        // Fallback to coordinates
-        locationInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-        // console.log removed for security
-      }
-    } catch (error) {
-      // console.log removed for security
-      // Fallback to coordinates
-      locationInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      // console.log removed for security
-      // Ensure location field is not empty for validation
-      if (!locationInput.value.trim()) {
-        locationInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      }
+    const cacheKey = getGeocodeKey(lat, lng);
+    latestGeocodeKey = cacheKey;
+
+    const cachedAddress = getCachedAddress(cacheKey);
+    if (cachedAddress) {
+      locationInput.value = cachedAddress;
+      return;
     }
+
+    const now = Date.now();
+    if (now < geocodeCooldownUntil) {
+      locationInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      return;
+    }
+
+    if (geocodeDebounceTimer) {
+      clearTimeout(geocodeDebounceTimer);
+      geocodeDebounceTimer = null;
+    }
+
+    geocodeDebounceTimer = setTimeout(async () => {
+      // Avoid starting requests too frequently even when user taps quickly
+      const sinceLastStart = Date.now() - lastGeocodeStartedAt;
+      if (sinceLastStart < GEOCODE_MIN_INTERVAL_MS) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, GEOCODE_MIN_INTERVAL_MS - sinceLastStart)
+        );
+      }
+
+      // Abort any in-flight request so we don't apply stale addresses
+      if (geocodeAbortController) {
+        geocodeAbortController.abort();
+      }
+      geocodeAbortController = new AbortController();
+      lastGeocodeStartedAt = Date.now();
+
+      const requestKey = cacheKey;
+
+      try {
+        const response = await fetch(
+          `/api/public/reverse-geocode?lat=${lat}&lng=${lng}`,
+          { signal: geocodeAbortController.signal }
+        );
+
+        if (response.status === 429) {
+          let retryAfterSeconds = 10;
+          const headerRetry = response.headers.get("retry-after");
+          if (headerRetry) {
+            const parsed = Number.parseInt(headerRetry, 10);
+            if (Number.isFinite(parsed) && parsed > 0) retryAfterSeconds = parsed;
+          }
+
+          try {
+            const data = await response.json();
+            if (
+              data &&
+              Number.isFinite(data.retryAfterSeconds) &&
+              data.retryAfterSeconds > 0
+            ) {
+              retryAfterSeconds = data.retryAfterSeconds;
+            }
+          } catch {
+            // ignore
+          }
+
+          geocodeCooldownUntil = Date.now() + retryAfterSeconds * 1000;
+          locationInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const address = data && data.display_name ? data.display_name : null;
+
+        if (address) {
+          geocodeCache.set(requestKey, {
+            value: address,
+            timestamp: Date.now()
+          });
+        }
+
+        // Only apply if this is still the latest requested coordinate set
+        if (latestGeocodeKey === requestKey) {
+          locationInput.value = address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        }
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+
+        locationInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        if (!locationInput.value.trim()) {
+          locationInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        }
+      }
+    }, GEOCODE_DEBOUNCE_MS);
   }
   // Set initial coordinates with validation (don't show warning on initial load)
   // Validate initial coordinates and update submit button state
-  updateCoordinates(initialCenter.lat, initialCenter.lng, false).then(() => {
-    updateLocationText(initialCenter.lat, initialCenter.lng);
+  updateCoordinates(initialPos.lat, initialPos.lng, false).then(() => {
+    updateLocationText(initialPos.lat, initialPos.lng);
   });
   // Marker drag events with boundary validation
   // Only update coordinates on dragend to ensure exact final position is captured
@@ -409,11 +605,25 @@ function setupLocationPicker(map) {
     const finalLat = latlng.lat;
     const finalLng = latlng.lng;
 
+    const isValid = await validateCoordinates(finalLat, finalLng);
+    if (!isValid) {
+      showBoundaryWarning();
+      // Snap back to last valid
+      setTimeout(() => {
+        marker.setLatLng([lastValidLatLng.lat, lastValidLatLng.lng]);
+        updateCoordinates(lastValidLatLng.lat, lastValidLatLng.lng, false);
+        updateLocationText(lastValidLatLng.lat, lastValidLatLng.lng);
+      }, 1000);
+      return;
+    }
+
     // Ensure marker position matches input values exactly
     await updateCoordinates(finalLat, finalLng, true); // Show warning on drag end
     updateLocationText(finalLat, finalLng);
 
     // Double-check: ensure marker position matches saved coordinates
+    const latInput = document.getElementById("latitude");
+    const lngInput = document.getElementById("longitude");
     const savedLat = parseFloat(latInput.value);
     const savedLng = parseFloat(lngInput.value);
     const markerLat = marker.getLatLng().lat;
@@ -431,6 +641,13 @@ function setupLocationPicker(map) {
   map.on("click", async (e) => {
     // if (isUserInteracting) return; // Removed to prevent stuck state preventing clicks
     const { lat, lng } = e.latlng;
+    
+    const isValid = await validateCoordinates(lat, lng);
+    if (!isValid) {
+      showBoundaryWarning();
+      return;
+    }
+
     // Set marker position first, then get exact position from marker
     marker.setLatLng([lat, lng]);
     // Get exact position from marker to ensure consistency
@@ -438,158 +655,163 @@ function setupLocationPicker(map) {
     await updateCoordinates(markerPos.lat, markerPos.lng, true);
     updateLocationText(markerPos.lat, markerPos.lng);
   });
-  // Map move events (when user drags the map) with boundary validation
-  map.on("movestart", () => {
-    isUserInteracting = true;
-  });
-  map.on("moveend", async () => {
-    if (!isUserInteracting) return;
-    const center = map.getCenter();
-    // Set marker position first, then get exact position from marker
-    marker.setLatLng([center.lat, center.lng]);
-    // Get exact position from marker to ensure consistency
-    const markerPos = marker.getLatLng();
-    await updateCoordinates(markerPos.lat, markerPos.lng, true);
-    updateLocationText(markerPos.lat, markerPos.lng);
-    isUserInteracting = false;
-  });
-  // Geolocation button
-  const geolocationButton = L.control({ position: "topleft" });
-  geolocationButton.onAdd = function (map) {
-    const div = L.DomUtil.create("div", "geolocation-control");
-    div.innerHTML = '<button type="button" title="Use my location">📍</button>';
-    div.style.cssText =
-      "background: white; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 2px;";
-    div.addEventListener("click", function () {
-      if (navigator.geolocation) {
-        // Check geolocation permissions
-        if (navigator.permissions) {
-          navigator.permissions
-            .query({ name: "geolocation" })
-            .then((_result) => {
-              // console.log removed
-            });
-        }
-        // console.log removed for security
-        const options = {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000, // 5 minutes
-        };
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            // console.log removed for security
-            // console.log removed for security
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            const { accuracy } = position.coords;
-            const { _altitude } = position.coords;
-            const { _heading } = position.coords;
-            const { _speed } = position.coords;
-            const _timestamp = new Date(position._timestamp);
-            // console.log removed for security
-            // console.log removed for security
-            // console.log removed for security
-            // console.log removed for security
-            // console.log removed for security
-            // console.log removed for security
-            // console.log removed for security
-            // console.log removed for security
-            // Check accuracy
-            if (accuracy > 100) {
-              console.warn(
-                `⚠️ Low accuracy: ${accuracy}m. Location may not be precise.`
-              );
-            } else {
-              // console.log removed for security
-            }
-            // Validate geolocation coordinates against boundary
-            const isValid = await validateCoordinates(lat, lng);
-            if (!isValid) {
-              import("../../components/toast.js").then(({ showMessage }) =>
-                showMessage(
-                  "error",
-                  "Your current location is outside Digos City boundaries. Please select a location within the city on the map."
-                )
-              );
-              return;
-            }
-            map.setView([lat, lng], 16);
-            // Set marker position first, then get exact position from marker
-            marker.setLatLng([lat, lng]);
-            // Get exact position from marker to ensure consistency
-            const markerPos = marker.getLatLng();
-            const exactLat = markerPos.lat;
-            const exactLng = markerPos.lng;
-            await updateCoordinates(exactLat, exactLng, true);
-            updateLocationText(exactLat, exactLng);
-            // console.log removed for security
-          },
-          (error) => {
-            console.error("❌ Geolocation error:", error);
-            // console.log removed for security
-            switch (error.code) {
-              case error.PERMISSION_DENIED:
-                // console.log removed for security
-                import("../../components/toast.js").then(({ showMessage }) =>
-                  showMessage(
-                    "error",
-                    "Location access denied. Please allow location access or select manually on the map."
-                  )
-                );
-                break;
-              case error.POSITION_UNAVAILABLE:
-                // console.log removed for security
-                import("../../components/toast.js").then(({ showMessage }) =>
-                  showMessage(
-                    "error",
-                    "Location information unavailable. Please select manually on the map."
-                  )
-                );
-                break;
-              case error.TIMEOUT:
-                // console.log removed for security
-                import("../../components/toast.js").then(({ showMessage }) =>
-                  showMessage(
-                    "error",
-                    "Location request timed out. Please try again or select manually on the map."
-                  )
-                );
-                break;
-              default:
-                // console.log removed for security
-                import("../../components/toast.js").then(({ showMessage }) =>
-                  showMessage(
-                    "error",
-                    "Unable to get your location. Please select manually on the map."
-                  )
-                );
-                break;
-            }
-          },
-          options
-        );
-      } else {
-        console.error("❌ Geolocation is not supported by this browser");
-        import("../../components/toast.js").then(({ showMessage }) =>
-          showMessage(
+  // Auto locate button (placed below the map in the page)
+  const autoLocateBtn = document.getElementById("btn-auto-locate");
+
+  let autoLocateInFlight = false;
+
+  function setAutoLocateBusy(isBusy) {
+    if (!autoLocateBtn) return;
+    autoLocateBtn.disabled = isBusy;
+    autoLocateBtn.setAttribute("aria-busy", String(Boolean(isBusy)));
+  }
+
+  const runAutoLocate = async () => {
+    if (autoLocateInFlight) return;
+
+    // Most mobile browsers block geolocation on plain HTTP for non-localhost pages.
+    // If we keep attempting anyway, users get repeated warnings/errors that feel like a loop.
+    if (!window.isSecureContext && !isLocalhostHost(window.location.hostname)) {
+      notifyOnce(
+        "geo_insecure_context",
+        "error",
+        "Auto locate requires HTTPS on most phones. Open this page over HTTPS (see Dev HTTPS setup) or select manually on the map.",
+        15000
+      );
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      notifyOnce(
+        "geo_unsupported",
+        "error",
+        "Geolocation is not supported by this browser. Please select manually on the map."
+      );
+      return;
+    }
+
+    autoLocateInFlight = true;
+    setAutoLocateBusy(true);
+
+    // Best-effort permission precheck (not supported on all browsers, notably some iOS Safari versions)
+    try {
+      if (navigator.permissions?.query) {
+        const perm = await navigator.permissions.query({ name: "geolocation" });
+        if (perm?.state === "denied") {
+          notifyOnce(
+            "geo_permission_denied_precheck",
             "error",
-            "Geolocation is not supported by this browser. Please select manually on the map."
-          )
-        );
+            "Location access is blocked. Enable location permission for this site, then try again — or select manually on the map.",
+            15000
+          );
+          autoLocateInFlight = false;
+          setAutoLocateBusy(false);
+          return;
+        }
       }
-    });
-    return div;
+    } catch {
+      // ignore
+    }
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000, // 5 minutes
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const { accuracy } = position.coords;
+
+          if (accuracy > 100) {
+            console.warn(
+              `⚠️ Low accuracy: ${accuracy}m. Location may not be precise.`
+            );
+          }
+
+          const isValid = await validateCoordinates(lat, lng);
+          if (!isValid) {
+            notifyOnce(
+              "geo_out_of_bounds",
+              "error",
+              "Your current location is outside Digos City boundaries. Please select a location within the city on the map.",
+              15000
+            );
+            return;
+          }
+
+          map.setView([lat, lng], 16);
+          marker.setLatLng([lat, lng]);
+          const markerPos = marker.getLatLng();
+          await updateCoordinates(markerPos.lat, markerPos.lng, true);
+          updateLocationText(markerPos.lat, markerPos.lng);
+        } finally {
+          autoLocateInFlight = false;
+          setAutoLocateBusy(false);
+        }
+      },
+      (error) => {
+        console.error("❌ Geolocation error:", error);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            notifyOnce(
+              "geo_permission_denied",
+              "error",
+              "Location access denied. Allow location access for this site, then try again — or select manually on the map.",
+              15000
+            );
+            break;
+          case error.POSITION_UNAVAILABLE:
+            notifyOnce(
+              "geo_position_unavailable",
+              "error",
+              "Location information unavailable. Please select manually on the map.",
+              12000
+            );
+            break;
+          case error.TIMEOUT:
+            notifyOnce(
+              "geo_timeout",
+              "error",
+              "Location request timed out. Please try again or select manually on the map.",
+              12000
+            );
+            break;
+          default:
+            notifyOnce(
+              "geo_unknown",
+              "error",
+              "Unable to get your location. Please select manually on the map.",
+              12000
+            );
+            break;
+        }
+
+        autoLocateInFlight = false;
+        setAutoLocateBusy(false);
+      },
+      options
+    );
   };
-  geolocationButton.addTo(map);
+
+  if (autoLocateBtn) {
+    autoLocateBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      runAutoLocate();
+    });
+  }
   // console.log removed for security
 }
 /**
  * Initialize the complete complaint location picker
  */
-async function initializeComplaintLocationPickerComplete() {
+async function initializecomplaintLocationPickerComplete() {
   try {
-    const map = await initializeComplaintLocationPicker();
+    const map = await initializecomplaintLocationPicker();
     if (map) {
       setupLocationPicker(map);
     }
@@ -600,8 +822,8 @@ async function initializeComplaintLocationPickerComplete() {
 // Auto-initialize when DOM is ready
 document.addEventListener(
   "DOMContentLoaded",
-  initializeComplaintLocationPickerComplete
+  initializecomplaintLocationPickerComplete
 );
 // Export functions for manual use
-window.initializeComplaintLocationPicker = initializeComplaintLocationPicker;
+window.initializecomplaintLocationPicker = initializecomplaintLocationPicker;
 window.setupLocationPicker = setupLocationPicker;

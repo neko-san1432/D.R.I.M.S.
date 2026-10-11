@@ -1,0 +1,1588 @@
+// Heatmap initialization script
+// Moved from inline script to comply with CSP
+
+// Global references
+let map = null;
+let heatmapViz = null;
+let currentFilters = {
+  status: "",
+  category: "",
+  department: "",
+  includeResolved: true,
+};
+let isInitialLoad = false;
+window.isInitialLoad = false;
+
+// Helper function to get checked values from checkbox group (needed by background refresh)
+function getCheckedValues(checkboxClass) {
+  const checkboxes = document.querySelectorAll(`.${checkboxClass}:checked`);
+  return Array.from(checkboxes).map((cb) => cb.value);
+}
+
+// Simple initialization - map with heatmap and controls
+(async function () {
+  try {
+    // Wait for Leaflet to be available
+    // eslint-disable-next-line no-unmodified-loop-condition
+    while (typeof L === "undefined") {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    // Store original center point (origin) - calculated from brgyBoundariesLocation.json
+    // Center calculated from all barangay boundaries: [6.854282, 125.318462]
+    const originCenter = [6.854282, 125.318462]; // Digos City center from JSON file
+    const originZoom = 11;
+
+    // Initialize map with increased zoom out level
+    map = await initializeSimpleMap("map", {
+      center: originCenter,
+      zoom: originZoom,
+      minZoom: 8, // Allow zooming out further (lower = more zoom out)
+    });
+
+    if (!map) {
+      throw new Error("Failed to initialize map");
+    }
+
+    // Store map globally for boundaryGenerator
+    window.simpleMap = map;
+
+    // --- Dark Mode Handler ---
+    // Function to check and update map theme
+    const updateMapTheme = () => {
+      const isDark = document.documentElement.classList.contains("dark");
+      if (typeof window.switchTileLayer === "function") {
+        if (isDark) {
+          window.switchTileLayer("Standard Dark");
+        } else {
+          // Switch back to default (OpenStreetMap or Standard Light)
+          // Check what was previous or default. usually OSM.
+          window.switchTileLayer("OpenStreetMap");
+        }
+      }
+    };
+
+    // Initial check (delay slightly to ensure layers are init)
+    setTimeout(updateMapTheme, 100);
+
+    // Watch for theme changes
+    const themeObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "class"
+        ) {
+          updateMapTheme();
+        }
+      });
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    // -------------------------
+
+    // Ensure layer control (tile changer) stays below zoom controls
+    // It should remain in its default Leaflet position (.leaflet-top.leaflet-left)
+    // No need to move it - it's already positioned correctly below zoom controls
+
+    // Add zoom event listener for heatmap/marker visibility and origin reset
+    map.on("zoomend", () => {
+      const currentZoom = map.getZoom();
+      const minZoom = map.getMinZoom();
+
+      // When zoomed out to minimum level, reset to origin
+      if (currentZoom <= minZoom) {
+        map.setView(originCenter, originZoom, { animate: true });
+      }
+
+      // Mark initial load as complete only when user zooms IN (zoom > 11)
+      // This ensures markers stay hidden until user manually zooms in
+      if (isInitialLoad && currentZoom > 11) {
+        isInitialLoad = false;
+        window.isInitialLoad = false;
+      }
+
+      // Zoom-based visibility: heatmap at zoom <= 11, markers at zoom > 11
+      updateZoomBasedVisibility(currentZoom);
+    });
+
+    // Also listen to zoom to update immediately
+    map.on("zoom", () => {
+      const currentZoom = map.getZoom();
+
+      // Mark initial load as complete only when user zooms IN (zoom > 11)
+      // This ensures markers stay hidden until user manually zooms in
+      if (isInitialLoad && currentZoom > 11) {
+        isInitialLoad = false;
+        window.isInitialLoad = false;
+      }
+
+      // NOTE: do NOT call updateZoomBasedVisibility() here — that callback is
+      // expensive (may recreate markers / iterate all DOM nodes) and fires on
+      // every animation frame during a pinch-zoom or scroll-wheel zoom.
+      // The `zoomend` listener above handles the full update once the gesture ends.
+    });
+
+    // Initialize heatmap visualization
+    heatmapViz = new HeatmapVisualization(map);
+
+    // Initialize user role for role-based filtering
+    await heatmapViz.initializeUserRole();
+
+    // console.log("[HEATMAP] User role initialized:", {
+    //   role: heatmapViz.userRole,
+    //   department: heatmapViz.userdepartment,
+    //   isCoordinator: heatmapViz.userRole === "complaint-coordinator",
+    //   isSuperAdmin: heatmapViz.userRole === "super-admin",
+    // });
+
+    // LGU staff are scoped to their assigned office
+    // Super-admins see everything (no department filter)
+    if (heatmapViz.userRole === "lgu" && heatmapViz.userdepartment) {
+      currentFilters.department = heatmapViz.userdepartment;
+    } else if (heatmapViz.userRole === "super-admin") {
+      currentFilters.department = "";
+    }
+
+    // Store globally for boundaryGenerator to access
+    window.heatmapViz = heatmapViz;
+
+    // Setup control panel handlers
+    setupControlPanel();
+
+    // Setup sidebar toggle
+    setupSidebarToggle();
+
+    // Setup toggle buttons — ONLY if the tactical HUD inline script hasn't already handled them.
+    // The inline <script> in heatmap.html clones the buttons and attaches mutually-exclusive handlers.
+    // If that script ran, `#hud-left` exists and buttons are already wired.
+    if (!document.getElementById("hud-left")) {
+      setupToggleButtons();
+    }
+
+    // Wait a bit for boundaries to load, then load complaint data
+    // This ensures boundary filtering works correctly
+    let boundaryWaitAttempts = 0;
+    const maxBoundaryWait = 20; // Wait up to 4 seconds (20 * 200ms)
+    while (!window.cityBoundaries && boundaryWaitAttempts < maxBoundaryWait) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      boundaryWaitAttempts++;
+    }
+
+    if (window.cityBoundaries) {
+      // console.log(
+      //   "[HEATMAP] Boundaries loaded, filtering complaints by boundary"
+      // );
+    } else {
+      console.warn(
+        "[HEATMAP] Boundaries not loaded yet, using bounding box fallback"
+      );
+    }
+
+    // Load complaint data (but keep default Digos City view - don't auto-fit)
+    await loadcomplaintData();
+
+    // Keep default Digos City view on initial load instead of auto-fitting
+    // Users can click "Fit to All Markers" button if they want to see all complaints
+  } catch (error) {
+    console.error("[HEATMAP] Initialization failed:", error);
+  }
+})();
+
+// Calculate date range from complaint data
+function calculateDateRange(complaintData) {
+  if (!complaintData || complaintData.length === 0) {
+    return { oldest: null, latest: null };
+  }
+
+  let oldest = null;
+  let latest = null;
+
+  complaintData.forEach((complaint) => {
+    const complaintDate = new Date(
+      complaint.submittedAt || complaint.submitted_at
+    );
+    if (isNaN(complaintDate.getTime())) {
+      return; // Skip invalid dates
+    }
+
+    if (!oldest || complaintDate < oldest) {
+      oldest = new Date(complaintDate);
+    }
+    if (!latest || complaintDate > latest) {
+      latest = new Date(complaintDate);
+    }
+  });
+
+  return { oldest, latest };
+}
+
+// Setup date picker constraints based on complaint data and selected dates
+function setupDatePickerConstraints() {
+  const dateStart = document.getElementById("date-range-start");
+  const dateEnd = document.getElementById("date-range-end");
+
+  if (!dateStart || !dateEnd || !heatmapViz || !heatmapViz.allcomplaintData) {
+    return;
+  }
+
+  const { oldest, latest } = calculateDateRange(heatmapViz.allcomplaintData);
+
+  if (!oldest || !latest) {
+    console.warn(
+      "[HEATMAP] No valid complaint dates found for date range restriction"
+    );
+    return;
+  }
+
+  // Format dates as YYYY-MM-DD for HTML5 date inputs
+  const oldestDateStr = oldest.toISOString().split("T")[0];
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  // Get currently selected dates
+  const selectedStartDate = dateStart.value;
+  const selectedEndDate = dateEnd.value;
+
+  // Set base min/max for both inputs (oldest to today)
+  dateStart.setAttribute("min", oldestDateStr);
+  dateStart.setAttribute("max", todayStr);
+  dateEnd.setAttribute("min", oldestDateStr);
+  dateEnd.setAttribute("max", todayStr);
+
+  // Apply dynamic constraints based on selected dates
+  updateDatePickerConstraints(selectedStartDate, selectedEndDate);
+}
+
+// Update date picker constraints dynamically when dates are selected
+function updateDatePickerConstraints(selectedStartDate, selectedEndDate) {
+  const dateStart = document.getElementById("date-range-start");
+  const dateEnd = document.getElementById("date-range-end");
+
+  if (!dateStart || !dateEnd || !heatmapViz || !heatmapViz.allcomplaintData) {
+    return;
+  }
+
+  const { oldest } = calculateDateRange(heatmapViz.allcomplaintData);
+  if (!oldest) {
+    return;
+  }
+
+  const oldestDateStr = oldest.toISOString().split("T")[0];
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  // Start date: min = oldest, max = selected end date (or today if no end date selected)
+  if (selectedEndDate) {
+    dateStart.setAttribute("max", selectedEndDate);
+  } else {
+    dateStart.setAttribute("max", todayStr);
+  }
+  dateStart.setAttribute("min", oldestDateStr);
+
+  // End date: min = selected start date (or oldest if no start date selected), max = today
+  if (selectedStartDate) {
+    dateEnd.setAttribute("min", selectedStartDate);
+  } else {
+    dateEnd.setAttribute("min", oldestDateStr);
+  }
+  dateEnd.setAttribute("max", todayStr);
+
+  // Clear invalid selections
+  if (selectedStartDate && selectedEndDate) {
+    const startDate = new Date(selectedStartDate);
+    const endDate = new Date(selectedEndDate);
+
+    if (startDate > endDate) {
+      // Start date is after end date - clear the one that violates constraint
+      const startMax = new Date(dateStart.getAttribute("max"));
+      const endMin = new Date(dateEnd.getAttribute("min"));
+
+      if (startDate > startMax) {
+        dateStart.value = "";
+      }
+      if (endDate < endMin) {
+        dateEnd.value = "";
+      }
+    }
+  }
+}
+
+// Load complaint data (only called once on initial load, then filters are applied client-side)
+async function loadcomplaintData() {
+  try {
+    // Load ALL complaints (no filters) - we'll filter client-side
+    await heatmapViz.loadcomplaintData({ includeResolved: true });
+
+    // Get the count of all complaints
+    const totalCount = heatmapViz.allcomplaintData
+      ? heatmapViz.allcomplaintData.length
+      : 0;
+    // console.log(`[HEATMAP] Loaded ${totalCount} total complaint(s)`);
+
+    // Setup date picker constraints based on loaded complaint data
+    setupDatePickerConstraints();
+    // Default to showing All Time complaints (no date filter)
+    const dateStart = document.getElementById("date-range-start");
+    const dateEnd = document.getElementById("date-range-end");
+    if (dateStart && dateEnd) {
+      dateStart.value = "";
+      dateEnd.value = "";
+      console.log("[HEATMAP] Defaulting filter to All Time");
+    }
+
+    // REMOVED: Redundant initial heatmap creation
+    // applyFiltersAndUpdate() below will create the heatmap with the "Today" filter applied
+
+    // IMPORTANT: Do NOT create markers during initial load
+    // Markers will be created lazily when user zooms in for the first time
+    // This prevents any flash of markers on page load
+    // Markers will be created in updateZoomBasedVisibility() when zoom > 11 and isInitialLoad becomes false
+
+    // Apply initial filters (markers don't exist yet, so this only affects heatmap)
+    applyFiltersAndUpdate();
+
+    // Initialize Advanced Features (Emergency Panel, etc.)
+    if (window.AdvancedFeatures) {
+      await window.AdvancedFeatures.init(map);
+      console.log("[HEATMAP] Advanced Features Initialized");
+    }
+
+    // Apply initial zoom-based visibility (only heatmap will show)
+    const initialZoom = map ? map.getZoom() : 11;
+    updateZoomBasedVisibility(initialZoom);
+
+    // Update statistics
+    updateStatistics();
+
+    // Render Emergency Panel with High Priority items
+    if (window.AdvancedFeatures && heatmapViz.allcomplaintData) {
+      const criticalItems = heatmapViz.allcomplaintData.filter(c =>
+        ["Urgent", "High"].includes(c.priority) ||
+        ["Critical", "Emergency"].includes(c.category)
+      );
+      window.AdvancedFeatures.renderEmergencyPanel(criticalItems);
+      window.AdvancedFeatures.renderCriticalMarkers(criticalItems);
+    }
+
+    // [CACHE] Start 30-second background refresh
+    startBackgroundRefresh();
+  } catch (error) {
+    console.error("[HEATMAP] Failed to load data:", error);
+  }
+}
+
+// [CACHE] Background refresh function
+let backgroundRefreshInterval = null;
+const REFRESH_INTERVAL_MS = 30000;
+
+async function refreshComplaintData() {
+  try {
+    console.log("[HEATMAP] Refreshing complaint data from server with current filters...");
+
+    // Get current filters to send to server
+    const filters = getCurrentFilterParams();
+    console.log("[HEATMAP] Using filters:", filters);
+
+    // Fetch fresh data from server (which now uses cache)
+    const apiClientModule = await import("../../js/config/apiClient.js");
+    const apiClient = apiClientModule.default;
+
+    const { data, error } = await apiClient.get("/api/complaints/locations", {
+      params: filters
+    });
+
+    if (error) {
+      console.warn("[HEATMAP] Refresh failed:", error);
+      return;
+    }
+
+    const newComplaints = data?.data || data || [];
+    console.log(`[HEATMAP] Refreshed: ${newComplaints.length} complaints`);
+
+    // Update heatmapViz with new data
+    if (heatmapViz && newComplaints.length > 0) {
+      heatmapViz.allcomplaintData = newComplaints;
+      heatmapViz.complaintData = newComplaints;
+
+      // Recreate layers with new data
+      heatmapViz.createHeatmapLayer();
+      heatmapViz.createMarkerLayer();
+
+      // Apply current filters and visibility
+      const currentZoom = map ? map.getZoom() : 11;
+      updateZoomBasedVisibility(currentZoom);
+      updateStatistics();
+    }
+  } catch (error) {
+    console.error("[HEATMAP] Background refresh error:", error);
+  }
+}
+
+// Helper function to get current filter parameters
+function getCurrentFilterParams() {
+  const params = {
+    includeResolved: document.getElementById("include-resolved")?.checked ?? true
+  };
+
+  // Get status filters
+  const statusValues = getCheckedValues("status-checkbox");
+  if (statusValues.length > 0) {
+    params.status = statusValues.join(",");
+  }
+
+  // Get category filters
+  const categoryValues = getCheckedValues("category-checkbox");
+  if (categoryValues.length > 0) {
+    params.category = categoryValues.join(",");
+  }
+
+  // Get department filters
+  const departmentValues = getCheckedValues("department-checkbox");
+  if (departmentValues.length > 0) {
+    params.department = departmentValues.join(",");
+  }
+
+  // Get date range
+  const startDate = document.getElementById("date-range-start")?.value;
+  const endDate = document.getElementById("date-range-end")?.value;
+
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+
+  return params;
+}
+
+function startBackgroundRefresh() {
+  if (backgroundRefreshInterval) {
+    clearInterval(backgroundRefreshInterval);
+  }
+
+  backgroundRefreshInterval = setInterval(() => {
+    refreshComplaintData();
+  }, REFRESH_INTERVAL_MS);
+
+  console.log(`[HEATMAP] Background refresh started (${REFRESH_INTERVAL_MS}ms interval)`);
+}
+
+function stopBackgroundRefresh() {
+  if (backgroundRefreshInterval) {
+    clearInterval(backgroundRefreshInterval);
+    backgroundRefreshInterval = null;
+    console.log("[HEATMAP] Background refresh stopped");
+  }
+}
+
+// Track if this is the initial load (show only heatmap regardless of zoom)
+// Moved to top of file
+// Make it globally accessible so heatmapVisualization can check it
+// Moved to top of file
+
+// Function to update visibility based on zoom level (must be global for zoom events)
+function updateZoomBasedVisibility(zoom) {
+  if (!heatmapViz) return;
+
+  // When the tactical HUD is present (heatmap.html), layer visibility is managed
+  // exclusively by the inline HUD toggle script (mutually-exclusive buttons).
+  // Do NOT auto-show/hide layers here — it fights with the user's toggle choices.
+  if (document.getElementById("hud-left")) {
+    // Only ensure markers are lazily built on first zoom-in so they're ready when toggled
+    if (zoom > 10 && !heatmapViz.markerLayer && !heatmapViz._markersBuilding) {
+      heatmapViz.createMarkerLayer();
+    }
+    return;
+  }
+
+  const zoomThreshold = 10;
+  const heatmapToggle = document.getElementById("toggle-heatmap-btn");
+  const isHeatmapForced =
+    heatmapToggle && heatmapToggle.classList.contains("forced-on");
+
+  // On initial load, show only heatmap regardless of zoom
+  // Markers will remain hidden until user manually zooms in (zoom > 11)
+  if (isInitialLoad) {
+    if (heatmapViz.heatmapLayer) {
+      heatmapViz.showHeatmap();
+    }
+    if (heatmapViz.markerLayer) {
+      // Explicitly hide all markers - they won't show until user zooms in
+      heatmapViz.hideMarkers();
+    }
+    return; // Exit early - don't process zoom-based visibility during initial load
+  }
+
+  if (zoom <= zoomThreshold) {
+    // Show heatmap, hide markers (zoom <= 11)
+    if (heatmapViz.heatmapLayer) {
+      heatmapViz.showHeatmap();
+    }
+    if (heatmapViz.markerLayer) {
+      // Hide all markers when zoom <= 11
+      heatmapViz.hideMarkers();
+    }
+  } else {
+    // Zoom > 11: Show markers that pass filters, hide heatmap unless forced
+    // Create markers lazily if they don't exist yet (first time user zooms in).
+    // _markersBuilding: async build is in progress — don't retrigger.
+    if (
+      !heatmapViz.markerLayer ||
+      (heatmapViz.markerLayer.getLayers().length === 0 &&
+        !heatmapViz._markersBuilding)
+    ) {
+      heatmapViz.createMarkerLayer();
+    }
+
+    if (
+      heatmapViz.markerLayer &&
+      heatmapViz.markerLayer.getLayers().length > 0 &&
+      !heatmapViz._markersBuilding
+    ) {
+      // Markers already exist — ensure layer is on the map
+      if (!heatmapViz.map.hasLayer(heatmapViz.markerLayer)) {
+        heatmapViz.markerLayer.addTo(heatmapViz.map);
+      }
+
+      // Trigger marker visibility update based on current filters
+      if (heatmapViz.updateMarkerVisibility) {
+        heatmapViz.updateMarkerVisibility();
+      } else {
+        heatmapViz.showMarkers();
+      }
+    }
+
+    // Hide heatmap unless forced on
+    if (heatmapViz.heatmapLayer) {
+      if (isHeatmapForced) {
+        heatmapViz.showHeatmap();
+      } else {
+        heatmapViz.hideHeatmap();
+      }
+    }
+  }
+}
+
+// Function to ensure menu toggle and reset view button are in horizontal row
+function positionResetViewButton() {
+  const customControlsRow = document.querySelector(".map-custom-controls-row");
+  const resetViewButton = document.getElementById("reset-view-btn");
+  const menuToggle = document.getElementById("menu-toggle") || document.getElementById("floating-menu-btn");
+
+  if (!customControlsRow) return;
+
+  // Ensure menu toggle is in the row
+  if (menuToggle && menuToggle.parentElement !== customControlsRow) {
+    customControlsRow.insertBefore(menuToggle, customControlsRow.firstChild);
+  }
+
+  // Ensure reset view button is in the row (not positioned elsewhere)
+  if (resetViewButton) {
+    // Remove any absolute/fixed positioning that might have been set
+    resetViewButton.style.position = "relative";
+    resetViewButton.style.top = "auto";
+    resetViewButton.style.left = "auto";
+    resetViewButton.style.bottom = "auto";
+
+    // Ensure it's in the row container
+    if (resetViewButton.parentElement !== customControlsRow) {
+      customControlsRow.appendChild(resetViewButton);
+    }
+  }
+
+  // Layer control (tile changer) should stay in its default Leaflet position
+  // below the zoom controls - don't move it to the row
+}
+
+// Setup control panel event handlers
+function setupControlPanel() {
+  // New Dropdown Logic for Horizontal Toolbar
+  const dropdowns = [
+    { btnId: "toolbar-display-btn", dropdownId: "toolbar-display-dropdown" },
+    { btnId: "toolbar-date-btn", dropdownId: "toolbar-date-dropdown" },
+    { btnId: "toolbar-status-btn", dropdownId: "toolbar-status-dropdown" },
+    { btnId: "toolbar-category-btn", dropdownId: "toolbar-category-dropdown" },
+    { btnId: "toolbar-office-btn", dropdownId: "toolbar-office-dropdown" },
+    { btnId: "toolbar-stats-btn", dropdownId: "toolbar-stats-dropdown" },
+  ];
+
+  function closeAllDropdowns() {
+    dropdowns.forEach(({ dropdownId }) => {
+      const el = document.getElementById(dropdownId);
+      if (el) el.classList.add("hidden");
+    });
+  }
+
+  dropdowns.forEach(({ btnId, dropdownId }) => {
+    const btn = document.getElementById(btnId);
+    const dropdown = document.getElementById(dropdownId);
+
+    if (btn && dropdown) {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isHidden = dropdown.classList.contains("hidden");
+        // Close others first
+        closeAllDropdowns();
+        // Toggle current
+        if (isHidden) {
+          dropdown.classList.remove("hidden");
+        }
+      });
+
+      // Prevent closing when clicking inside dropdown
+      dropdown.addEventListener("click", (e) => {
+        e.stopPropagation();
+      });
+    }
+  });
+
+  // Close on outside click
+  document.addEventListener("click", () => {
+    closeAllDropdowns();
+  });
+
+  // Initial positioning - REMOVED
+
+  // Setup Back Button
+  const backBtn = document.getElementById("back-btn");
+  if (backBtn) {
+    backBtn.addEventListener("click", () => {
+      history.back();
+    });
+  }
+
+  // Also reposition on window resize - REMOVED
+
+  // Initialize reset view button positioning
+  setTimeout(() => {
+    positionResetViewButton();
+  }, 100);
+
+  // Ensure layer control is in row after everything loads
+  setTimeout(() => {
+    positionResetViewButton();
+  }, 500);
+
+  // Setup legend toggle (collapsible drawer)
+  const legendToggle = document.getElementById("legend-toggle");
+  const mapLegend = document.getElementById("map-legend");
+  if (legendToggle && mapLegend) {
+    legendToggle.addEventListener("click", () => {
+      mapLegend.classList.toggle("collapsed");
+      mapLegend.classList.toggle("expanded");
+    });
+  }
+
+  // Helper function to reset checkboxes
+  function resetCheckboxes(checkboxClass) {
+    document
+      .querySelectorAll(`.${checkboxClass}`)
+      .forEach((cb) => (cb.checked = false));
+  }
+
+  // Debounce function to limit API calls
+  let filterDebounceTimer = null;
+  let isUpdating = false; // Prevent concurrent updates
+
+  function debounceFilterUpdate(callback, delay = 500) {
+    clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = setTimeout(async () => {
+      if (!isUpdating) {
+        isUpdating = true;
+        try {
+          await callback();
+        } catch (error) {
+          console.error("[HEATMAP] Error in debounced update:", error);
+        } finally {
+          // Always reset the flag after a short delay to allow UI to update
+          setTimeout(() => {
+            isUpdating = false;
+          }, 100);
+        }
+      } else {
+        console.log(
+          "[HEATMAP] Update already in progress, will retry after current update completes"
+        );
+      }
+    }, delay);
+  }
+
+  // Function to apply filters and update map visibility (client-side, no API call)
+  function applyFiltersAndUpdate() {
+    const statusValues = getCheckedValues("status-checkbox");
+    const categoryValues = getCheckedValues("category-checkbox");
+    // Only apply department filter for LGU staff, NOT for super-admins
+    const userRestricteddepartment =
+      heatmapViz?.userRole === "lgu" && heatmapViz.userdepartment
+        ? heatmapViz.userdepartment
+        : null;
+
+    // Super-admins see all complaints (no department filter)
+    const isSuperAdmin = heatmapViz?.userRole === "super-admin";
+    const departmentValues = isSuperAdmin
+      ? null
+      : userRestricteddepartment || getCheckedValues("department-checkbox");
+
+    const startDate = document.getElementById("date-range-start")?.value || "";
+    const endDate = document.getElementById("date-range-end")?.value || "";
+
+    // HUD Filters
+    const hudCategory = document.getElementById("category-filter-preset")?.value;
+    const hudSubcategory = document.getElementById("subcategory-filter-preset")?.value;
+    const hudBarangay = document.getElementById("barangay-filter-preset")?.value;
+
+    // Merge sidebar and HUD category filters
+    // If HUD category is selected, it takes precedence for single-category view
+    const finalCategories = hudCategory ? [hudCategory] : (categoryValues.length > 0 ? categoryValues : "");
+
+    currentFilters = {
+      status: statusValues.length > 0 ? statusValues : "",
+      category: finalCategories,
+      subcategory: hudSubcategory || "",
+      barangay: hudBarangay || "",
+      department: departmentValues && departmentValues.length > 0 ? departmentValues : "",
+      includeResolved: document.getElementById("include-resolved")?.checked ?? true,
+      startDate,
+      endDate,
+    };
+
+    // Update heatmapViz with current filters and apply client-side filtering
+    if (heatmapViz) {
+      heatmapViz.currentFilters = currentFilters;
+      heatmapViz.applyClientSideFilters(currentFilters);
+
+      // Detect which HUD layer is currently active and refresh it
+      const hudLeft = document.getElementById("hud-left");
+      if (hudLeft) {
+        // Tactical HUD mode: refresh whichever layer is currently active
+        const activeHeatmap = document.getElementById("toggle-heatmap-btn")?.classList.contains("active");
+        const activeMarkers = document.getElementById("toggle-markers-btn")?.classList.contains("active");
+        const activeClusters = document.getElementById("toggle-clusters-btn")?.classList.contains("active");
+
+        if (activeHeatmap) {
+          if (heatmapViz.heatmapLayer) heatmapViz.hideHeatmap();
+          heatmapViz.createHeatmapLayer();
+          heatmapViz.showHeatmap();
+        } else if (activeMarkers) {
+          heatmapViz.hideMarkers();
+          heatmapViz.createMarkerLayer();
+          heatmapViz.showMarkers();
+        } else if (activeClusters) {
+          heatmapViz.toggleClustering(false);
+          heatmapViz.toggleClustering(true);
+        } else {
+          // No layer active — just update heatmap data (default layer)
+          heatmapViz.createHeatmapLayer();
+        }
+      } else {
+        // Non-tactical page: use original zoom-based behavior
+        if (heatmapViz.heatmapLayer) heatmapViz.hideHeatmap();
+        heatmapViz.createHeatmapLayer();
+        const currentZoom = map ? map.getZoom() : 11;
+        updateZoomBasedVisibility(currentZoom);
+      }
+
+      updateStatistics();
+    }
+  }
+
+  // Make function and timer globally accessible for dynamically loaded checkboxes
+  window.applyFiltersAndUpdate = applyFiltersAndUpdate;
+  window.debounceFilterUpdate = debounceFilterUpdate;
+
+  // Apply Filters button removed - filtering is now automatic when checkboxes change
+
+  // Auto-apply filters when checkboxes change
+  function setupAutoFiltering() {
+    // Status checkboxes (already in HTML, attach listeners)
+    document.querySelectorAll(".status-checkbox").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        debounceFilterUpdate(applyFiltersAndUpdate, 500);
+      });
+    });
+
+    // Category and department checkboxes are loaded dynamically,
+    // so listeners are attached in loadCategories() and loaddepartments()
+
+    // Include resolved checkbox
+    const includeResolvedCheckbox = document.getElementById("include-resolved");
+    if (includeResolvedCheckbox) {
+      includeResolvedCheckbox.addEventListener("change", () => {
+        debounceFilterUpdate(applyFiltersAndUpdate, 500);
+      });
+    }
+
+    // Date range filters
+    const dateStart = document.getElementById("date-range-start");
+    const dateEnd = document.getElementById("date-range-end");
+    const clearDateRange = document.getElementById("clear-date-range");
+
+    if (dateStart) {
+      dateStart.addEventListener("change", () => {
+        // Update constraints when start date changes
+        const selectedStartDate = dateStart.value;
+        const selectedEndDate = dateEnd ? dateEnd.value : "";
+        updateDatePickerConstraints(selectedStartDate, selectedEndDate);
+        debounceFilterUpdate(applyFiltersAndUpdate, 500);
+      });
+    }
+
+    if (dateEnd) {
+      dateEnd.addEventListener("change", () => {
+        // Update constraints when end date changes
+        const selectedStartDate = dateStart ? dateStart.value : "";
+        const selectedEndDate = dateEnd.value;
+        updateDatePickerConstraints(selectedStartDate, selectedEndDate);
+        debounceFilterUpdate(applyFiltersAndUpdate, 500);
+      });
+    }
+
+    if (clearDateRange) {
+      clearDateRange.addEventListener("click", () => {
+        if (dateStart) dateStart.value = "";
+        if (dateEnd) dateEnd.value = "";
+        // Reset constraints to base range
+        updateDatePickerConstraints("", "");
+        debounceFilterUpdate(applyFiltersAndUpdate, 500);
+      });
+
+      // Add "Today" button dynamically if it doesn't exist
+      if (!document.getElementById("filter-today-btn")) {
+        const todayBtn = document.createElement("button");
+        todayBtn.id = "filter-today-btn";
+        todayBtn.className = "btn btn-sm btn-outline-primary ms-1";
+        todayBtn.textContent = "Today";
+        todayBtn.type = "button";
+
+        // Insert after clear button
+        clearDateRange.parentNode.insertBefore(
+          todayBtn,
+          clearDateRange.nextSibling
+        );
+
+        todayBtn.addEventListener("click", () => {
+          const today = new Date();
+          const todayStr = today.toISOString().split("T")[0];
+
+          if (dateStart) dateStart.value = todayStr;
+          if (dateEnd) dateEnd.value = todayStr;
+
+          // Update constraints
+          updateDatePickerConstraints(todayStr, todayStr);
+          debounceFilterUpdate(applyFiltersAndUpdate, 500);
+        });
+      }
+    }
+
+    // Toggle markers / heatmap button handlers are NOT attached here.
+    // They are managed by the inline HUD script in heatmap.html (mutually-exclusive layer toggles)
+    // or by setupToggleButtons() on non-tactical pages.
+    // Attaching handlers here would create duplicates that cancel each other out.
+  }
+
+  // Reset filters
+  const resetFiltersBtn = document.getElementById("reset-filters-btn");
+  if (resetFiltersBtn) {
+    resetFiltersBtn.addEventListener("click", async () => {
+      resetCheckboxes("status-checkbox");
+      resetCheckboxes("category-checkbox");
+      resetCheckboxes("department-checkbox");
+      document.getElementById("include-resolved").checked = true;
+
+      // Clear date range
+      const dateStart = document.getElementById("date-range-start");
+      const dateEnd = document.getElementById("date-range-end");
+      if (dateStart) dateStart.value = "";
+      if (dateEnd) dateEnd.value = "";
+
+      // Reset heatmap toggle
+      const toggleHeatmapBtn = document.getElementById("toggle-heatmap-btn");
+      if (toggleHeatmapBtn) {
+        toggleHeatmapBtn.classList.remove("forced-on");
+        toggleHeatmapBtn.textContent = "Toggle Heatmap";
+      }
+
+      currentFilters = {
+        status: "",
+        category: "",
+        department:
+          heatmapViz?.userRole === "lgu" && heatmapViz.userdepartment
+            ? heatmapViz.userdepartment
+            : "",
+        includeResolved: true,
+        startDate: "",
+        endDate: "",
+      };
+
+      await loadcomplaintData();
+      fitToAllMarkers();
+    });
+  }
+
+  // Fit to bounds - check if button exists (might have been removed in redesign)
+  const fitBoundsBtn = document.getElementById("fit-bounds-btn");
+  if (fitBoundsBtn) {
+    fitBoundsBtn.addEventListener("click", () => {
+      fitToAllMarkers();
+    });
+  }
+
+  // Reset view button
+  const resetViewBtn = document.getElementById("reset-view-btn");
+  if (resetViewBtn) {
+    resetViewBtn.addEventListener("click", () => {
+      resetMapView();
+    });
+    // console.log("[HEATMAP] Reset view button initialized");
+  } else {
+    console.warn("[HEATMAP] Reset view button not found in DOM");
+  }
+
+  // Accordion functionality
+  const accordionHeaders = document.querySelectorAll(".accordion-header");
+  accordionHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const section = header.parentElement;
+      const isActive = section.classList.contains("active");
+
+      // Close all sections except the one clicked (if it was already active, we'll close it below)
+      document.querySelectorAll(".accordion-section.active").forEach((s) => {
+        if (s !== section) {
+          s.classList.remove("active");
+        }
+      });
+
+      // Toggle clicked section
+      if (isActive) {
+        section.classList.remove("active");
+      } else {
+        section.classList.add("active");
+      }
+
+      // Reposition gear button after animation
+    });
+  });
+
+  // Fixed Heatmap Configuration
+  if (heatmapViz) {
+    heatmapViz.heatmapConfig.intensity = 1.0; // Fixed intensity
+    // Zoom threshold is handled in updateZoomBasedVisibility with fixed value 11
+  }
+
+  // Initial icon setup is no longer needed as CSS handles rotation
+  // but we ensure only one section is open initially (handled by HTML class="active")
+
+  // Load categories, departments, and status filters
+  loadStatusFilters();
+  loadCategories();
+  loaddepartments();
+  loadBarangays();
+
+  // Setup auto-filtering immediately
+  setupAutoFiltering();
+}
+
+// Load status filters
+function loadStatusFilters() {
+  const group = document.getElementById("status-filters");
+  if (!group) return;
+
+  const statuses = [
+    { label: "New / Pending", value: "new,pending", color: "#6B7280" }, // gray-500
+    { label: "Assigned", value: "assigned", color: "#FBBF24" }, // yellow-400
+    { label: "In Progress", value: "in_progress", color: "#3B82F6" }, // blue-500
+    { label: "Completed", value: "resolved,closed", color: "#10B981" }, // green-500
+  ];
+
+  statuses.forEach((status) => {
+    const label = document.createElement("label");
+    // Use Tailwind classes used for better dark mode support
+    label.className =
+      "flex items-center gap-1.5 font-normal py-0.5 cursor-pointer text-gray-700 dark:text-gray-300";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "status-checkbox";
+    checkbox.value = status.value;
+    checkbox.checked = true; // Default to checked
+
+    // Add color indicator
+    const indicator = document.createElement("span");
+    indicator.style.cssText = `width: 8px; height: 8px; border-radius: 50%; background-color: ${status.color}; display: inline-block;`;
+
+    const text = document.createTextNode(status.label);
+
+    label.appendChild(checkbox);
+    label.appendChild(indicator);
+    label.appendChild(text);
+    group.appendChild(label);
+
+    // Add listener
+    checkbox.addEventListener("change", () => {
+      if (window.debounceFilterUpdate && window.applyFiltersAndUpdate) {
+        window.debounceFilterUpdate(window.applyFiltersAndUpdate, 500);
+      }
+    });
+  });
+}
+
+// Load categories
+// Load categories
+async function loadCategories() {
+  try {
+    const apiClientModule = await import("../../js/config/apiClient.js");
+    const apiClient = apiClientModule.default;
+    const { data } = await apiClient.get(
+      "/api/department-structure/categories"
+    );
+
+    const group = document.getElementById("category-filter-group");
+    const presetSelect = document.getElementById("category-filter-preset");
+    
+    if (!group && !presetSelect) {
+      console.warn("[HEATMAP] No category filter elements found (neither group nor preset), skipping categories");
+      return;
+    }
+    const loading = document.getElementById("category-loading");
+    if (loading) loading.remove();
+
+    if (data && data.length > 0) {
+      // Prioritization Logic for LGU Admins
+      let sortedData = [...data];
+      const userdepartmentCode = await getUserdepartment();
+      const isLguStaff = heatmapViz?.userRole === "lgu";
+
+      if (isLguStaff && userdepartmentCode) {
+        // Mark categories as relevant if they map to the user's department
+        sortedData = sortedData.map((category) => {
+          const isRelevant = category.subcategories?.some((sub) =>
+            sub.departments?.some(
+              (dept) => (dept.code || "").toUpperCase() === userdepartmentCode
+            )
+          );
+          return { ...category, isRelevant };
+        });
+
+        // Sort: Relevant first
+        sortedData.sort((a, b) => {
+          if (a.isRelevant && !b.isRelevant) return -1;
+          if (!a.isRelevant && b.isRelevant) return 1;
+          return 0; // Maintain original order otherwise
+        });
+      }
+
+      sortedData.forEach((category) => {
+        const label = document.createElement("label");
+        // Use Tailwind classes for styling instead of inline styles where possible for easier dark mode support
+        label.className =
+          "flex items-center gap-1.5 font-normal py-0.5 cursor-pointer text-gray-700 dark:text-gray-300";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "category-checkbox";
+        checkbox.value = category.id;
+
+        // Auto-check relevant categories for LGU Admins
+        if (category.isRelevant) {
+          checkbox.checked = true;
+          // Use classes for bold/color instead of inline
+          label.classList.remove(
+            "font-normal",
+            "text-gray-700",
+            "dark:text-gray-300"
+          );
+          label.classList.add(
+            "font-semibold",
+            "text-gray-900",
+            "dark:text-white"
+          );
+        }
+
+        // Add change listener for auto-filtering
+        checkbox.addEventListener("change", () => {
+          if (window.debounceFilterUpdate && window.applyFiltersAndUpdate) {
+            window.debounceFilterUpdate(window.applyFiltersAndUpdate, 500);
+          }
+        });
+
+        const text = document.createTextNode(
+          `${category.icon || ""} ${category.name}`
+        );
+        label.appendChild(checkbox);
+        label.appendChild(text);
+
+        // Visual indicator for relevant categories
+        if (category.isRelevant) {
+          const badge = document.createElement("span");
+          badge.style.cssText =
+            "width: 6px; height: 6px; background-color: #3B82F6; border-radius: 50%; margin-left: auto;";
+          label.appendChild(badge);
+        }
+        if (group) {
+          group.appendChild(label);
+        }
+      });
+
+      // console.log(
+      //   `[HEATMAP] Loaded ${sortedData.length} categories (Prioritized for ${userdepartmentCode})`
+      // );
+
+      // Populate HUD Category Dropdown
+      const hudCategorySelect = document.getElementById("category-filter-preset");
+      if (hudCategorySelect) {
+        hudCategorySelect.innerHTML = '<option value="">Category</option>';
+        data.forEach(cat => {
+          const opt = document.createElement("option");
+          opt.value = cat.id; // Use UUID for filtering
+          opt.textContent = cat.name;
+          hudCategorySelect.appendChild(opt);
+        });
+
+        // Add listener for category change to update subcategories
+        hudCategorySelect.addEventListener("change", () => {
+          const selectedCatId = hudCategorySelect.value;
+          const selectedCat = data.find(c => c.id === selectedCatId);
+          populateHUDSubcategories(selectedCat);
+          debounceFilterUpdate(applyFiltersAndUpdate, 500);
+        });
+      }
+    }
+  } catch (error) {
+    console.error("[HEATMAP] Failed to load categories:", error);
+  } finally {
+    // Reposition gear button after categories load (panel height might change)
+  }
+}
+
+// Get user's department code
+async function getUserdepartment() {
+  try {
+    const apiClientModule = await import("../../js/config/apiClient.js");
+    const apiClient = apiClientModule.default;
+    const response = await apiClient.get("/api/user/role-info");
+    if (response.success && response.data) {
+      // Try multiple possible field names for department
+      const department =
+        response.data.department ||
+        response.data.dpt ||
+        response.data.metadata?.department ||
+        response.data.metadata?.dpt ||
+        response.data.raw_user_meta_data?.department ||
+        response.data.raw_user_meta_data?.dpt;
+      if (department) {
+        return department.toUpperCase();
+      }
+    }
+  } catch (error) {
+    console.warn("[HEATMAP] Failed to get user department:", error);
+  }
+  // Fallback: try Supabase session
+  try {
+    const { supabase } = await import("../../js/config/config.js");
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const metadata =
+      session?.user?.raw_user_meta_data || session?.user?.user_metadata || {};
+    const department = metadata.department || metadata.dpt;
+    if (department) {
+      return department.toUpperCase();
+    }
+  } catch (error) {
+    console.warn("[HEATMAP] Failed to get department from session:", error);
+  }
+  return null;
+}
+
+// Load departments
+async function loaddepartments() {
+  // Simple Workflow Mode: Skip loading departments - not using office assignments
+  const group = document.getElementById("department-filter-group");
+  if (group) {
+    group.style.display = "none"; // Hide the entire department filter group
+  }
+  // Also hide the toolbar-office-btn if it exists
+  const officeBtn = document.getElementById("toolbar-office-btn");
+  if (officeBtn) {
+    officeBtn.style.display = "none";
+  }
+  const officeDropdown = document.getElementById("toolbar-office-dropdown");
+  if (officeDropdown) {
+    officeDropdown.style.display = "none";
+  }
+  // Exit early - no department filtering in Simple Workflow Mode
+
+  /* Original department loading code (disabled for Simple Workflow Mode)
+  try {
+    const loading = document.getElementById("department-loading");
+    if (loading) loading.remove();
+
+    const isLguStaff = heatmapViz?.userRole === "lgu";
+    const userdepartmentCode =
+      heatmapViz?.userdepartment || (await getUserdepartment());
+
+    if (isLguStaff && userdepartmentCode) {
+      const notice = document.createElement("div");
+      notice.style.cssText =
+        "padding: 12px; background: #f9fafb; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; color: #374151;";
+      notice.innerHTML = `
+        <strong>Office Scope</strong>
+        <p style="margin: 6px 0 0 0; font-size: 12px;">
+          complaints are automatically filtered to your office
+          <span style="font-weight: 600;">${userdepartmentCode}</span>.
+        </p>
+      `;
+      group.appendChild(notice);
+      currentFilters.department = userdepartmentCode;
+      return;
+    }
+
+    // Try using getActivedepartments first (simpler endpoint)
+    let departments = [];
+    try {
+      const { getActivedepartments } = await import(
+        "../../js/utils/departmentUtils.js"
+      );
+      departments = await getActivedepartments();
+    } catch (e) {
+      console.warn(
+        "[HEATMAP] getActivedepartments failed, trying getdepartments:",
+        e
+      );
+      // Fallback to getdepartments
+      const { getdepartments } = await import(
+        "../../js/utils/departmentUtils.js"
+      );
+      departments = await getdepartments();
+    }
+
+    // If still empty, try direct API call
+    if (!departments || departments.length === 0) {
+      try {
+        const response = await fetch("/api/departments/active");
+        const result = await response.json();
+        if (result.success && result.data) {
+          departments = result.data;
+        }
+      } catch (e) {
+        console.error("[HEATMAP] Direct API call failed:", e);
+      }
+    }
+
+    // Get user's department and sort departments to put user's office first
+    const resolvedUserdepartmentCode = userdepartmentCode;
+    if (resolvedUserdepartmentCode && departments && departments.length > 0) {
+      // Sort: user's department first, then others
+      departments.sort((a, b) => {
+        const aCode = (a.code || "").toUpperCase();
+        const bCode = (b.code || "").toUpperCase();
+        const aIsUserDept = aCode === resolvedUserdepartmentCode;
+        const bIsUserDept = bCode === resolvedUserdepartmentCode;
+
+        if (aIsUserDept && !bIsUserDept) return -1;
+        if (!aIsUserDept && bIsUserDept) return 1;
+        return 0; // Keep original order for non-matching items
+      });
+    }
+
+    if (departments && departments.length > 0) {
+      departments.forEach((dept) => {
+        const label = document.createElement("label");
+        // Use Tailwind classes
+        label.className =
+          "flex items-center gap-1.5 font-normal py-0.5 text-gray-700 dark:text-gray-300";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "department-checkbox";
+        checkbox.value = dept.code || dept.id;
+
+        // Add change listener for auto-filtering
+        checkbox.addEventListener("change", () => {
+          if (window.debounceFilterUpdate && window.applyFiltersAndUpdate) {
+            window.debounceFilterUpdate(window.applyFiltersAndUpdate, 500);
+          }
+        });
+
+        const deptName = dept.name || `department ${dept.code || dept.id}`;
+        const deptCode = dept.code ? `(${dept.code})` : "";
+        // Highlight user's department with bold text
+        const isUserDept =
+          resolvedUserdepartmentCode &&
+          (dept.code || "").toUpperCase() === resolvedUserdepartmentCode;
+        const text = document.createTextNode(`${deptName} ${deptCode}`);
+        label.appendChild(checkbox);
+        label.appendChild(text);
+        if (isUserDept) {
+          label.classList.remove(
+            "font-normal",
+            "text-gray-700",
+            "dark:text-gray-300"
+          );
+          label.classList.add("font-bold", "text-gray-900", "dark:text-white");
+        }
+        group.appendChild(label);
+      });
+      console.log(
+        `[HEATMAP] Loaded ${departments.length} department(s) for filtering${resolvedUserdepartmentCode
+          ? ` (user's office: ${resolvedUserdepartmentCode} at top)`
+          : ""
+        }`
+      );
+    } else {
+      const noDeptMsg = document.createElement("div");
+      noDeptMsg.textContent = "No departments available";
+      noDeptMsg.className = "text-gray-400 italic p-2 text-xs";
+      group.appendChild(noDeptMsg);
+      console.warn("[HEATMAP] No departments loaded");
+    }
+  } catch (error) {
+    console.error("[HEATMAP] Failed to load departments:", error);
+    const group = document.getElementById("department-filter-group");
+    const errorMsg = document.createElement("div");
+    errorMsg.textContent = "Error loading departments";
+    errorMsg.style.cssText = "color: #dc3545; padding: 8px;";
+    group.appendChild(errorMsg);
+  } finally {
+    // Reposition gear button after departments load (panel height might change)
+  }
+  End of original department loading code (disabled for Simple Workflow Mode) */
+}
+
+// Update statistics display
+function updateStatistics() {
+  if (!heatmapViz) return;
+
+  const total = heatmapViz.complaintData ? heatmapViz.complaintData.length : 0;
+  const visible = heatmapViz.markerLayer
+    ? heatmapViz.markerLayer.getLayers().length
+    : 0;
+
+  const totalStat = document.getElementById("total-complaints-stat");
+  const visibleStat = document.getElementById("visible-markers-stat");
+
+  if (totalStat) totalStat.textContent = total;
+  if (visibleStat) visibleStat.textContent = visible;
+
+  // Reposition gear button after stats update (panel height might change)
+}
+
+// Reset map view to original center and zoom
+function resetMapView() {
+  if (!map) return;
+
+  const originCenter = [6.854282, 125.318462]; // Digos City center
+  const originZoom = 11;
+
+  map.setView(originCenter, originZoom, { animate: true });
+}
+
+// Fit map to show all markers
+// This adjusts the map view to show all visible complaint markers
+function fitToAllMarkers() {
+  if (
+    !map ||
+    !heatmapViz ||
+    !heatmapViz.complaintData ||
+    heatmapViz.complaintData.length === 0
+  ) {
+    return;
+  }
+
+  // If only one complaint, don't zoom in too close - just center on it with a reasonable zoom
+  if (heatmapViz.complaintData.length === 1) {
+    const complaint = heatmapViz.complaintData[0];
+    map.setView([complaint.lat, complaint.lng], 14, { animate: false });
+    return;
+  }
+
+  const bounds = L.latLngBounds();
+  heatmapViz.complaintData.forEach((complaint) => {
+    bounds.extend([complaint.lat, complaint.lng]);
+  });
+
+  if (bounds.isValid()) {
+    // Calculate the size of the bounds
+    const northEast = bounds.getNorthEast();
+    const southWest = bounds.getSouthWest();
+    const latDiff = Math.abs(northEast.lat - southWest.lat);
+    const lngDiff = Math.abs(northEast.lng - southWest.lng);
+
+    // If bounds are too small (all complaints very close together), use minimum zoom
+    if (latDiff < 0.01 && lngDiff < 0.01) {
+      // All complaints are very close - center on them but don't zoom in too much
+      const center = bounds.getCenter();
+      map.setView([center.lat, center.lng], Math.min(map.getZoom(), 14), {
+        animate: false,
+      });
+    } else {
+      // Multiple complaints spread out - fit to bounds with padding
+      map.fitBounds(bounds, {
+        padding: [50, 50],
+        maxZoom: 16, // Prevent zooming in too close even if complaints are clustered
+      });
+    }
+  }
+}
+
+// Setup sidebar toggle
+function setupSidebarToggle() {
+  const menuToggle = document.getElementById("menu-toggle") || document.getElementById("floating-menu-btn");
+  const sidebar = document.getElementById("sidebar");
+
+  if (menuToggle && sidebar) {
+    menuToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (window.sidebarController && window.sidebarController.open) {
+        window.sidebarController.open();
+      } else {
+        // Fallback if controller not ready
+        sidebar.classList.toggle("open");
+      }
+    });
+
+    // Ensure button is visible
+    menuToggle.style.display = "flex";
+    menuToggle.style.visibility = "visible";
+    menuToggle.style.opacity = "1";
+  } else {
+    console.error("[SIDEBAR] Menu toggle or sidebar not found!", {
+      menuToggle,
+      sidebar,
+    });
+  }
+}
+
+// Setup toggle buttons for markers, heatmap and clusters
+function setupToggleButtons() {
+  console.log("[HEATMAP] Setting up toggle buttons...");
+
+  // Toggle markers button
+  const toggleMarkersBtn = document.getElementById("toggle-markers-btn");
+  if (toggleMarkersBtn) {
+    toggleMarkersBtn.addEventListener("click", () => {
+      console.log("[HEATMAP] Markers toggle clicked");
+
+      // Create markers if they don't exist
+      if (!heatmapViz.markerLayer || heatmapViz.markerLayer.getLayers().length === 0) {
+        heatmapViz.createMarkerLayer();
+      }
+
+      // Toggle visibility
+      const isVisible = map.hasLayer(heatmapViz.markerLayer);
+      if (isVisible) {
+        heatmapViz.hideMarkers();
+        toggleMarkersBtn.classList.remove("active", "text-blue-400");
+      } else {
+        heatmapViz.showMarkers();
+        toggleMarkersBtn.classList.add("active", "text-blue-400");
+      }
+    });
+  }
+
+  // Toggle heatmap button
+  const toggleHeatmapBtn = document.getElementById("toggle-heatmap-btn");
+  if (toggleHeatmapBtn) {
+    toggleHeatmapBtn.addEventListener("click", () => {
+      console.log("[HEATMAP] Heatmap toggle clicked");
+
+      const isVisible = heatmapViz.heatmapLayer && map.hasLayer(heatmapViz.heatmapLayer);
+      if (isVisible) {
+        heatmapViz.hideHeatmap();
+        toggleHeatmapBtn.classList.remove("active", "text-blue-400");
+      } else {
+        if (!heatmapViz.heatmapLayer) {
+          heatmapViz.createHeatmapLayer();
+        }
+        heatmapViz.showHeatmap();
+        toggleHeatmapBtn.classList.add("active", "text-blue-400");
+      }
+    });
+  }
+
+  // Toggle clusters button
+  const toggleClustersBtn = document.getElementById("toggle-clusters-btn");
+  if (toggleClustersBtn) {
+    toggleClustersBtn.addEventListener("click", () => {
+      console.log("[HEATMAP] Clusters toggle clicked");
+
+      const isForced = toggleClustersBtn.classList.contains("active");
+      if (isForced) {
+        heatmapViz.toggleClustering(false);
+        toggleClustersBtn.classList.remove("active", "text-blue-400");
+      } else {
+        heatmapViz.toggleClustering(true);
+        toggleClustersBtn.classList.add("active", "text-blue-400");
+      }
+    });
+  }
+}
+
+// Populate HUD Subcategories
+function populateHUDSubcategories(category) {
+  const hudSubSelect = document.getElementById("subcategory-filter-preset");
+  if (!hudSubSelect) return;
+
+  hudSubSelect.innerHTML = '<option value="">Sub</option>';
+
+  if (category && category.subcategories && category.subcategories.length > 0) {
+    category.subcategories.forEach(sub => {
+      const opt = document.createElement("option");
+      opt.value = sub.id || sub.name;
+      opt.textContent = sub.name;
+      hudSubSelect.appendChild(opt);
+    });
+    hudSubSelect.disabled = false;
+  } else {
+    hudSubSelect.disabled = true;
+  }
+}
+
+// Load Barangays
+async function loadBarangays() {
+  try {
+    const barangaySelect = document.getElementById("barangay-filter-preset");
+    if (!barangaySelect) return;
+
+    // Load from boundaries if already loaded
+    if (window.cityBoundaries && window.cityBoundaries.length > 0) {
+      populateBarangayDropdown(window.cityBoundaries);
+    } else {
+      // Wait for boundaries
+      let attempts = 0;
+      const interval = setInterval(() => {
+        if (window.cityBoundaries && window.cityBoundaries.length > 0) {
+          populateBarangayDropdown(window.cityBoundaries);
+          clearInterval(interval);
+        }
+        if (++attempts > 50) clearInterval(interval);
+      }, 200);
+    }
+
+    barangaySelect.addEventListener("change", () => {
+      if (window.debounceFilterUpdate && window.applyFiltersAndUpdate) {
+        window.debounceFilterUpdate(window.applyFiltersAndUpdate, 500);
+      }
+    });
+  } catch (error) {
+    console.error("[HEATMAP] Failed to load barangays:", error);
+  }
+}
+
+function populateBarangayDropdown(boundaries) {
+  const select = document.getElementById("barangay-filter-preset");
+  if (!select) return;
+
+  // Preserve "All Barangays" option
+  select.innerHTML = '<option value="">All Barangays</option>';
+
+  // Sort barangays alphabetically
+  const sortedNames = boundaries
+    .map(b => b.name)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+
+  sortedNames.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+}

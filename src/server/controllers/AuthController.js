@@ -1,4 +1,5 @@
-const UserService = require("../services/UserService");
+const userService = require("../services/user/UserService");
+const loginInitializationService = require("../services/LoginInitializationService");
 const {
   ValidationError,
   ConflictError,
@@ -19,6 +20,7 @@ const {
 const supabase = Database.getClient();
 const { validatePasswordStrength } = require("../../shared/passwordValidation");
 const { validateUserRole } = require("../utils/roleValidation");
+const logger = require("../utils/Logger");
 
 class AuthController {
   /**
@@ -83,7 +85,7 @@ class AuthController {
         if (!department) {
           return res.status(400).json({
             success: false,
-            error: "Department is required for LGU staff",
+            error: "department is required for LGU staff",
           });
         }
         if (!employeeId) {
@@ -108,7 +110,7 @@ class AuthController {
       }
 
       // Create user
-      const user = await UserService.createUser({
+      const user = await userService.createUser({
         email,
         password,
         firstName,
@@ -163,8 +165,7 @@ class AuthController {
       if (!requiredFields.isValid) {
         return res.status(400).json({
           success: false,
-          error: `${requiredFields.missingFields.join(", ")} ${
-            requiredFields.missingFields.length === 1 ? "is" : "are"
+          error: `${requiredFields.missingFields.join(", ")} ${requiredFields.missingFields.length === 1 ? "is" : "are"
           } required`,
         });
       }
@@ -177,6 +178,7 @@ class AuthController {
           error: emailValidation.error,
         });
       }
+
       // Supabase Auth login
       const { data: authData, error: authError } =
         await supabase.auth.signInWithPassword({
@@ -185,11 +187,10 @@ class AuthController {
         });
       if (authError) {
         // Log detailed error server-side only
-        console.error("[LOGIN] Authentication failed:", {
+        logger.log("LOGIN", "Authentication failed:", {
           email: "[REDACTED]",
           error: authError.message,
-          code: authError.code,
-          timestamp: new Date().toISOString(),
+          code: authError.code
         });
 
         // Generic error message to prevent user enumeration
@@ -202,6 +203,31 @@ class AuthController {
 
       // Extract and combine user metadata
       const combinedMetadata = extractUserMetadata(authData.user);
+
+
+      logger.log("LOGIN_DEBUG", `User: ${email}, Role: ${combinedMetadata.role}, SimpleMode: ${process.env.SIMPLE_WORKFLOW_MODE}`);
+
+      // RESTRICT ROLES based on Workflow Mode
+      // 3-role system: citizen, lgu, super-admin
+      // Legacy roles (lgu-admin, lgu-hr, lgu-officer, complaint-coordinator) are
+      // normalized to 'lgu' by the auth middleware, so they still work for existing users.
+      const allowedRoles = ["citizen", "super-admin", "lgu"];
+
+      // Normalize legacy roles before checking (DB may still have old role values)
+      const rawRole = combinedMetadata.role || "citizen";
+      const legacyLguRoles = ["lgu-admin", "lgu-hr", "lgu-officer", "complaint-coordinator"];
+      const userRole = legacyLguRoles.includes(rawRole) || rawRole.startsWith("lgu-") ? "lgu" : rawRole;
+      logger.log("LOGIN_DEBUG", `Checking role '${userRole}' (raw: ${rawRole}) against allowed:`, allowedRoles);
+
+      if (!allowedRoles.includes(userRole)) {
+        logger.log("LOGIN", `Blocked login attempt for restricted role: ${userRole} (${email})`);
+
+        // Return generic error to prevent role enumeration, same as invalid password
+        return res.status(401).json({
+          success: false,
+          error: "Invalid email or password",
+        });
+      }
 
       // Check ban status
       // Check ban status
@@ -228,15 +254,14 @@ class AuthController {
             error: `Access denied. ${banMessage} Reason: ${banReason}`,
           });
         }
-        // Ban has expired, automatically unban (handled by UserManagementService on next check)
-        console.log("[LOGIN] Ban expired for user:", userId);
+        // Ban has expired, automatically unban (handled by userManagementService on next check)
+        logger.log("LOGIN", "Ban expired for user:", userId);
       }
 
       // Build user object from metadata
       const userName =
         combinedMetadata.name ||
-        `${combinedMetadata.first_name || ""} ${
-          combinedMetadata.last_name || ""
+        `${combinedMetadata.first_name || ""} ${combinedMetadata.last_name || ""
         }`.trim() ||
         authData.user.email?.split("@")[0] ||
         "Unknown User";
@@ -326,9 +351,9 @@ class AuthController {
       const userAgent = req.get("User-Agent");
 
       try {
-        await UserService.trackLogin(userId, ipAddress, userAgent);
+        await userService.trackLogin(userId, ipAddress, userAgent);
       } catch (trackError) {
-        console.warn("[LOGIN] ⚠️ Login tracking failed:", trackError.message);
+        logger.log("LOGIN", "⚠️ Login tracking failed:", trackError.message);
       }
       // Set session cookie with proper expiration
       const cookieOptions = getCookieOptions(remember);
@@ -338,7 +363,12 @@ class AuthController {
         cookieOptions
       );
 
-      // SECURITY: Access token is set in HttpOnly cookie for server-side use
+      // Trigger post-login initialization (async - doesn't block response)
+      loginInitializationService.onUserLogin(user).catch(err => {
+        logger.log("LOGIN", "Post-login initialization warning:", err.message);
+      });
+
+      // security: Access token is set in HttpOnly cookie for server-side use
       // Return refresh token in response for client-side Supabase session sync (less sensitive than access token)
       res.json({
         success: true,
@@ -351,8 +381,8 @@ class AuthController {
         message: "Login successful",
       });
     } catch (error) {
-      console.error("[LOGIN] 💥 Login error:", error.message);
-      console.error("[LOGIN] Error stack:", error.stack);
+      logger.log("LOGIN", "💥 Login error:", error.message);
+      logger.log("LOGIN", "Error stack:", error.stack);
       res.status(500).json({
         success: false,
         error: "Login failed. Please try again.",
@@ -366,10 +396,27 @@ class AuthController {
   /**
    * Get current user profile
    */
-  async getProfile(req, res) {
+  async getprofile(req, res) {
     try {
-      const userId = req.user.id;
-      const user = await UserService.getUserById(userId);
+      // SEC-21 FIX: Return req.user which contains the current session's role 
+      // (including any citizen_mode overrides) instead of the static DB profile.
+      if (req.user) {
+        return res.json({
+          success: true,
+          data: req.user,
+        });
+      }
+
+      // Fallback if req.user is somehow missing (should not happen with authenticateUser)
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: "Unauthorized",
+        });
+      }
+
+      const user = await userService.getUserById(userId);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -391,7 +438,7 @@ class AuthController {
   /**
    * Update user profile
    */
-  async updateProfile(req, res) {
+  async updateprofile(req, res) {
     try {
       const userId = req.user.id;
       const updateData = req.body;
@@ -417,12 +464,12 @@ class AuthController {
       // Note: City and province are no longer required since all users are from Digos City
       // Address validation removed - only barangay is needed for Digos City citizens
 
-      const user = await UserService.updateUser(userId, updateData, userId);
+      const user = await userService.updateUser(userId, updateData, userId);
 
       res.json({
         success: true,
         data: user,
-        message: "Profile updated successfully",
+        message: "profile updated successfully",
       });
     } catch (error) {
       console.error("Update profile error:", error);
@@ -480,7 +527,14 @@ class AuthController {
       }
 
       // Send password reset email - user will enter new password on confirmation page
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
+      const useHttps = process.env.USE_HTTPS === "true" || process.env.USE_HTTPS === "1";
+      const explicitFrontendUrl = process.env.FRONTEND_URL;
+      const requestBaseUrl = `${useHttps ? "https" : req.protocol}://${req.get("host")}`;
+      let frontendUrl = explicitFrontendUrl || requestBaseUrl;
+      if (useHttps && frontendUrl.startsWith("http://")) {
+        frontendUrl = `https://${frontendUrl.slice("http://".length)}`;
+      }
+      frontendUrl = frontendUrl.replace(/\/$/, "");
       const redirectUrl = logoutAllDevices
         ? `${frontendUrl}/confirm-password-change?logout_all_devices=true`
         : `${frontendUrl}/confirm-password-change`;
@@ -520,8 +574,7 @@ class AuthController {
     try {
       // Redirect to client-side confirmation page
       // The client will extract the token from URL hash and handle password entry
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
-      res.redirect(`${frontendUrl}/confirm-password-change${req.url}`);
+      res.redirect(`/confirm-password-change${req.url}`);
     } catch (error) {
       console.error("Confirm password change error:", error);
       res.status(500).json({
@@ -1038,7 +1091,7 @@ class AuthController {
         isOAuth = false,
       } = req.body;
       // Validate signup code first
-      const HRService = require("../services/HRService");
+      const HRService = require("../services/user/HRService");
 
       const hrService = new HRService();
       const codeValidation = await hrService.validateSignupCode(signupCode);
@@ -1075,7 +1128,7 @@ class AuthController {
       // Address validation removed - only barangay is needed for Digos City citizens
 
       // Create user as citizen first with pending approval metadata
-      const pendingUser = await UserService.createUser({
+      const pendingUser = await userService.createUser({
         email,
         password,
         firstName,
@@ -1101,7 +1154,7 @@ class AuthController {
       let lastError = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const _updated = await UserService.updateUser(
+          const _updated = await userService.updateUser(
             pendingUser.id,
             {
               status: "pending_approval",
@@ -1119,7 +1172,7 @@ class AuthController {
             {
               userId: pendingUser.id,
               pendingRole: role,
-              pendingDepartment: department_code,
+              pendingdepartment: department_code,
               attempt: attempt + 1,
             }
           );
@@ -1207,7 +1260,7 @@ class AuthController {
           .json({ success: false, error: "Signup code is required" });
       }
       // Validate signup code and extract intended role/department
-      const HRService = require("../services/HRService");
+      const HRService = require("../services/user/HRService");
 
       const hrService = new HRService();
       console.log("[OAUTH_SIGNUP_HR] Status: VALIDATING_SIGNUP_CODE", {

@@ -22,7 +22,7 @@ function _isUuidLike(value) {
 function _getTaxonomyLookup() {
   if (_taxonomyLookup) return _taxonomyLookup;
   try {
-    const filePath = path.join(process.cwd(), "public", "categories_subcategories.json");
+    const filePath = path.join(process.cwd(), "public", "assets", "json", "categoriesSubcategories.json");
     const taxonomy = JSON.parse(fs.readFileSync(filePath, "utf8"));
     const parents = Object.keys(taxonomy?.categories || {}).map(_normalizeWhitespace).filter(Boolean);
     const subcats = [];
@@ -75,12 +75,11 @@ function getSecondaryDepartments(departmentR) {
 function getStatusFromWorkflow(workflowStatus) {
   // Use Map to prevent object injection vulnerabilities
   const statusMap = new Map([
-    ["new", "pending review"],
-    ["assigned", "in progress"],
-    ["in_progress", "in progress"],
-    ["pending_approval", "in progress"],
-    ["completed", "resolved"],
-    ["cancelled", "rejected"]
+    ["submitted", "submitted"],
+    ["verified", "verified"],
+    ["under_review", "under review"],
+    ["action_taken", "action taken"],
+    ["resolved", "resolved"]
   ]);
   // Safe lookup with Map
   if (workflowStatus && typeof workflowStatus === "string") {
@@ -99,21 +98,18 @@ function getWorkflowFromStatus(status) {
   const statusLower = status.toLowerCase();
 
   // If it's already a workflow status, return it as-is
-  const validWorkflowStatuses = ["new", "assigned", "in_progress", "pending_approval", "completed", "cancelled"];
-  if (validWorkflowStatuses.includes(statusLower)) {
-    return statusLower;
-  }
-
-  // Map legacy status values to workflow_status
+  /* Create a case-insensitive map for robustness */
   const workflowMap = {
-    "pending review": "new",
-    "pending": "new",
-    "in progress": "in_progress",
-    "resolved": "completed",
-    "completed": "completed", // Also handle "completed" as a legacy status
-    "rejected": "cancelled",
-    "closed": "cancelled",
-    "cancelled": "cancelled"
+    "submitted": "submitted",
+    "pending": "submitted", // Legacy
+    "new": "submitted", // Legacy
+    "verified": "verified",
+    "under review": "under_review",
+    "under_review": "under_review",
+    "action taken": "action_taken",
+    "action_taken": "action_taken",
+    "resolved": "resolved",
+    "completed": "resolved" // Legacy
   };
 
   // Check if it's a confirmation status - these don't map to workflow_status directly
@@ -141,9 +137,9 @@ function getWorkflowFromStatus(status) {
 function normalizeComplaintData(complaint) {
   if (!complaint) return null;
   const normalized = { ...complaint };
-  // Derive primary and secondary departments from department_r
-  normalized.primary_department = getPrimaryDepartment(complaint.department_r);
-  // normalized.secondary_departments = getSecondaryDepartments(complaint.department_r); // Removed - derived from department_r
+  // Derive primary and secondary departments from departments
+  normalized.primary_department = getPrimaryDepartment(complaint.departments);
+  // normalized.secondary_departments = getSecondaryDepartments(complaint.departments); // Removed - derived from departments
   // Derive status from workflow_status for frontend compatibility
   normalized.status = getStatusFromWorkflow(complaint.workflow_status);
   // Include confirmation status for proper workflow display
@@ -151,22 +147,22 @@ function normalizeComplaintData(complaint) {
   // Add assignment progress information
   const progressInfo = getAssignmentProgress(complaint);
   normalized.assignment_progress = progressInfo;
-  // Ensure department_r is properly formatted
-  if (!Array.isArray(normalized.department_r)) {
-    normalized.department_r = [];
+  // Ensure departments is properly formatted
+  if (!Array.isArray(normalized.departments)) {
+    normalized.departments = [];
   }
-  // If we have primary_department but no department_r, populate it
-  if (complaint.primary_department && normalized.department_r.length === 0) {
-    normalized.department_r = [complaint.primary_department];
+  // If we have primary_department but no departments, populate it
+  if (complaint.primary_department && normalized.departments.length === 0) {
+    normalized.departments = [complaint.primary_department];
     // if (complaint.secondary_departments && Array.isArray(complaint.secondary_departments)) {
-    //   normalized.department_r.push(...complaint.secondary_departments);
+    //   normalized.departments.push(...complaint.secondary_departments);
     // }
   }
   return normalized;
 }
 /**
  * Get assignment progress information for a complaint
- * @param {Object} complaint - Complaint data with assignments
+ * @param {Object} complaint - complaint data with assignments
  * @returns {Object} Progress information
  */
 function getAssignmentProgress(complaint) {
@@ -200,31 +196,44 @@ function getAssignmentProgress(complaint) {
 }
 /**
  * Prepare complaint data for database insertion
- * @param {Object} complaintData - Complaint data from form
+ * @param {Object} complaintData - complaint data from form
  * @returns {Object} Data ready for database insertion
  */
-function prepareComplaintForInsert(complaintData) {
+function prepareComplaintForInsert(complaintData, userId) {
   const prepared = { ...complaintData };
+  
+  if (userId) {
+    prepared.submitted_by = userId;
+  }
   // Ensure workflow_status is set based on status if provided
   if (complaintData.status && !complaintData.workflow_status) {
     prepared.workflow_status = getWorkflowFromStatus(complaintData.status);
   }
-  // Ensure department_r is populated from primary_department and secondary_departments
-  if (complaintData.primary_department && (!complaintData.department_r || complaintData.department_r.length === 0)) {
-    prepared.department_r = [complaintData.primary_department];
-    // if (complaintData.secondary_departments && Array.isArray(complaintData.secondary_departments)) {
-    //   prepared.department_r.push(...complaintData.secondary_departments);
-    // }
+  // Ensure departments is populated from primary_department
+  if (complaintData.primary_department && (!complaintData.departments || complaintData.departments.length === 0)) {
+    prepared.departments = [complaintData.primary_department];
   }
   // Remove redundant fields that will be derived
+  // Map category and subcategory to their database column names (category_id, subcategory_id)
+  if (complaintData.category) prepared.category_id = complaintData.category;
+  if (complaintData.subcategory) prepared.subcategory_id = complaintData.subcategory;
+  
+  // Remove virtual and renamed fields
   delete prepared.primary_department;
   delete prepared.secondary_departments;
-  delete prepared.status;
+  delete prepared.category;
+  delete prepared.subcategory;
+  delete prepared.title; // Validation only, not in DB
+  delete prepared.isOthers; // Frontend flag
+  delete prepared.preferred_departments; // Logical field, not in DB
   delete prepared.type; // Remove type field - not in current schema
   delete prepared.subtype; // Remove subtype field - not in current schema
   delete prepared.evidence; // Remove evidence field - handled separately
-  // Keep category and subcategory fields - they are now part of the schema
-  // Note: category and subcategory should be UUIDs referencing categories and subcategories tables
+  delete prepared.assignment_progress; // Remove virtual field
+  delete prepared.confirmation_status; // Remove virtual field
+  delete prepared.department_r; // Remove legacy/incorrect field name if present
+  delete prepared.status; // Remove frontend-only status field (use workflow_status)
+  
   return prepared;
 }
 /**
@@ -239,12 +248,12 @@ function getComplaintStatistics(complaints) {
     byWorkflowStatus: {},
     byPriority: {},
     byCategory: {}, // Changed from byType to byCategory
-    byDepartment: {}
+    bydepartment: {}
   };
   complaints.forEach(complaint => {
     const normalized = normalizeComplaintData(complaint);
     // Count by status - validate input to prevent injection
-    const {status} = normalized;
+    const { status } = normalized;
     if (status && typeof status === "string" && status.length < 100) {
       // eslint-disable-next-line security/detect-object-injection
       stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
@@ -256,7 +265,7 @@ function getComplaintStatistics(complaints) {
       stats.byWorkflowStatus[workflowStatus] = (stats.byWorkflowStatus[workflowStatus] || 0) + 1;
     }
     // Count by priority
-    const {priority} = complaint;
+    const { priority } = complaint;
     if (priority && typeof priority === "string" && priority.length < 100) {
       // eslint-disable-next-line security/detect-object-injection
       stats.byPriority[priority] = (stats.byPriority[priority] || 0) + 1;
@@ -272,14 +281,14 @@ function getComplaintStatistics(complaints) {
     const primaryDept = normalized.primary_department;
     if (primaryDept && typeof primaryDept === "string" && primaryDept.length < 100) {
       // eslint-disable-next-line security/detect-object-injection
-      stats.byDepartment[primaryDept] = (stats.byDepartment[primaryDept] || 0) + 1;
+      stats.bydepartment[primaryDept] = (stats.bydepartment[primaryDept] || 0) + 1;
     }
   });
   return stats;
 }
 /**
  * Validate complaint data consistency
- * @param {Object} complaint - Complaint data to validate
+ * @param {Object} complaint - complaint data to validate
  * @returns {Object} Validation result with errors array
  */
 function validateComplaintConsistency(complaint) {
@@ -338,6 +347,30 @@ function validateComplaintConsistency(complaint) {
   };
 }
 
+/**
+ * Get the timeline step key for a given workflow status
+ * @param {string} workflowStatus
+ * @returns {string|null}
+ */
+// FC-12 NOTE: This function intentionally collapses multiple workflow statuses
+// into timeline phases for the 5-step progress display. "assigned", "verified",
+// and "under_review" all map to the "verified" phase. If distinct status display
+// is needed, use the raw workflow_status instead of this mapping.
+function getTimelineStepKey(workflowStatus) {
+  if (!workflowStatus) return null;
+  const ws = workflowStatus.toLowerCase();
+
+  if (["new", "submitted", "pending"].includes(ws)) return "submitted";
+  if (["assigned", "verified", "under_review"].includes(ws)) return "verified";
+  if (["pending_approval", "action_taken", "in_progress"].includes(ws))
+    return "action_taken";
+  if (["resolved", "completed", "closed"].includes(ws)) return "resolved";
+  if (ws === "rejected") return "rejected";
+  if (ws === "cancelled") return "cancelled";
+
+  return null;
+}
+
 module.exports = {
   getPrimaryDepartment,
   getSecondaryDepartments,
@@ -347,5 +380,6 @@ module.exports = {
   prepareComplaintForInsert,
   getComplaintStatistics,
   validateComplaintConsistency,
-  getAssignmentProgress
+  getAssignmentProgress,
+  getTimelineStepKey,
 };

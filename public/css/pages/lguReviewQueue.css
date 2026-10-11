@@ -1,0 +1,285 @@
+/* 
+   Obsidian Dark Theme - Review Queue 
+   A high-performance, dark-intelligence design system
+*/
+
+:root {
+  --rq-bg: #0f172a;
+  --rq-panel-bg: rgba(30, 41, 59, 0.4);
+  --rq-panel-border: rgba(255, 255, 255, 0.05);
+  --rq-accent-blue: #3b82f6;
+  --rq-accent-indigo: #6366f1;
+  --rq-text-primary: #ffffff;
+  --rq-text-secondary: #cbd5e1;
+  --rq-text-muted: #94a3b8;
+  --rq-border-light: rgba(255, 255, 255, 0.03);
+}
+
+body {
+  background-color: var(--rq-bg);
+  color: var(--rq-text-primary);
+}
+
+/* Panel & Layout */
+.rq-panel.panel {
+  background: var(--rq-panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--rq-panel-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* Intelligence Strip (Filter Bar) */
+.intelligence-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid var(--rq-panel-border);
+}
+
+.form-input, .form-select {
+  background: rgba(30, 41, 59, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: var(--rq-text-primary) !important;
+  border-radius: 8px !important;
+  font-size: 0.85rem !important;
+  padding: 6px 12px !important;
+  transition: all 0.2s ease;
+}
+
+.form-input:hover, .form-select:hover {
+  border-color: rgba(59, 130, 246, 0.4) !important;
+  background: rgba(30, 41, 59, 0.8) !important;
+}
+
+.form-input:focus, .form-select:focus {
+  border-color: var(--rq-accent-blue) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Priority Pills */
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 14px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 70px;
+  text-transform: capitalize;
+}
+
+.priority-pill-low { background: rgba(96, 165, 250, 0.15); color: #93c5fd; border: 1px solid rgba(96, 165, 250, 0.4); }
+.priority-pill-medium { background: rgba(251, 191, 36, 0.15); color: #fcd34d; border: 1px solid rgba(251, 191, 36, 0.4); }
+.priority-pill-high { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.4); }
+.priority-pill-urgent { background: rgba(248, 113, 113, 0.15); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.4); }
+
+/* Table Styling */
+.rq-table.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: transparent !important;
+}
+
+.rq-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #0f172a; /* Deep navy to match page bg */
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--rq-panel-border);
+}
+
+.rq-table tbody td {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--rq-border-light);
+  color: var(--rq-text-primary);
+  font-size: 0.82rem;
+  vertical-align: middle;
+  background: transparent !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0; /* Enable ellipsis in table cells */
+}
+
+.rq-table tbody tr {
+  height: 48px;
+  transition: background 0.2s ease;
+  background: transparent !important;
+}
+
+.cell-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Perspective Switcher */
+.perspective-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 12px;
+  margin-bottom: 24px;
+  width: fit-content;
+  border: 1px solid var(--rq-panel-border);
+}
+
+.perspective-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--rq-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  background: transparent;
+}
+
+.perspective-btn.active {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--rq-accent-blue);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.perspective-btn:hover:not(.active) {
+  color: var(--rq-text-primary);
+  background: rgba(255,255,255,0.03);
+}
+
+.category-main { font-weight: 500; color: var(--rq-text-primary); }
+.category-sep { opacity: 0.3; margin: 0 4px; }
+.category-sub { color: #f1f5f9; font-weight: 400; opacity: 0.9; }
+
+/* Buttons */
+.btn-review-premium {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.btn-review-premium:hover {
+  background: var(--rq-accent-blue);
+  color: #fff;
+}
+
+.btn-review-premium svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Priority Pills - Brightened */
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 10px;
+  border-radius: 99px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 60px;
+  text-transform: capitalize;
+}
+
+.priority-pill-low { background: rgba(96, 165, 250, 0.1); color: #93c5fd; border: 1px solid rgba(96, 165, 250, 0.2); }
+.priority-pill-medium { background: rgba(251, 191, 36, 0.1); color: #fcd34d; border: 1px solid rgba(251, 191, 36, 0.2); }
+.priority-pill-high { background: rgba(52, 211, 153, 0.1); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.2); }
+.priority-pill-urgent { background: rgba(248, 113, 113, 0.1); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.2); }
+
+/* Pagination Footer */
+.rq-pagination {
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.3);
+  border-top: 1px solid var(--rq-panel-border);
+  border-radius: 0 0 16px 16px;
+}
+
+.pagination-btn {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--rq-text-secondary);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rq-text-primary);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.page-num {
+  min-width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--rq-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.page-num:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--rq-text-primary);
+}
+
+.page-num.active {
+  background: #3b82f6;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

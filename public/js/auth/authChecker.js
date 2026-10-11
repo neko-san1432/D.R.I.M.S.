@@ -8,7 +8,7 @@ const SUPPRESS_DURATION_MS = 8000;
 export const saveUserMeta = (meta) => {
   try {
     localStorage.setItem(storageKey, JSON.stringify(meta));
-  } catch {}
+  } catch { }
 };
 
 export const getUserMeta = () => {
@@ -54,7 +54,7 @@ export const refreshMetaFromSession = async () => {
 export const setOAuthContext = (ctx) => {
   try {
     localStorage.setItem(oauthKey, JSON.stringify(ctx || {}));
-  } catch {}
+  } catch { }
 };
 
 export const getOAuthContext = () => {
@@ -69,7 +69,7 @@ export const getOAuthContext = () => {
 export const clearOAuthContext = () => {
   try {
     localStorage.removeItem(oauthKey);
-  } catch {}
+  } catch { }
 };
 
 export const suppressAuthErrorNotifications = (
@@ -78,7 +78,7 @@ export const suppressAuthErrorNotifications = (
   try {
     const expiresAt = Date.now() + duration;
     sessionStorage.setItem(authErrorSuppressKey, String(expiresAt));
-  } catch {}
+  } catch { }
 };
 
 const isAuthErrorSuppressed = () => {
@@ -103,7 +103,7 @@ const isAuthErrorSuppressed = () => {
 const clearAuthErrorSuppression = () => {
   try {
     sessionStorage.removeItem(authErrorSuppressKey);
-  } catch {}
+  } catch { }
 };
 
 const hasPendingOAuthSignup = () => {
@@ -169,7 +169,7 @@ export const getUserRole = async (options = {}) => {
     } else if (response.status === 401) {
       try {
         localStorage.removeItem("cl_user_meta");
-      } catch {}
+      } catch { }
       throw new Error("Unauthorized");
     }
   } catch (error) {
@@ -197,12 +197,8 @@ export const getUserRole = async (options = {}) => {
 };
 // Check if device is trusted (allows auto-refresh)
 const isDeviceTrusted = () => {
-  try {
-    const trusted = localStorage.getItem("device_trusted");
-    return trusted === "true";
-  } catch {
-    return false;
-  }
+  // Always trust device per user request to extend session duration
+  return true;
 };
 
 // Store device trust preference
@@ -281,7 +277,7 @@ export function initializeAuthListener() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ access_token: session.access_token }),
         });
-      } catch {}
+      } catch { }
       // Restart monitoring on fresh session
       stopTokenExpiryMonitoring();
       startTokenExpiryMonitoring();
@@ -654,30 +650,14 @@ function formatRoleNameForDisplay(role) {
 
   const roleNames = {
     citizen: "Citizen",
-    lgu: "LGU Officer",
-    "lgu-admin": "LGU Admin",
-    "complaint-coordinator": "Complaint Coordinator",
+    lgu: "LGU Staff",
     "super-admin": "Super Admin",
-    hr: "HR",
-    "lgu-hr": "LGU HR",
   };
 
-  // Handle LGU officer roles with department codes
-  if (/^lgu-(?!admin|hr)/.test(role)) {
-    const dept = role.replace(/^lgu-/, "").toUpperCase();
-    return `LGU Officer (${dept})`;
-  }
-
-  // Handle LGU admin roles with department codes
-  if (/^lgu-admin-/.test(role)) {
-    const dept = role.replace(/^lgu-admin-/, "").toUpperCase();
-    return `LGU Admin (${dept})`;
-  }
-
-  // Handle LGU HR roles with department codes
-  if (/^lgu-hr-/.test(role)) {
-    const dept = role.replace(/^lgu-hr-/, "").toUpperCase();
-    return `HR (${dept})`;
+  // Handle legacy LGU sub-roles with department codes (backward compat)
+  if (role.startsWith("lgu-") || role === "complaint-coordinator") {
+    const dept = role.replace(/^lgu-(?:admin-|hr-|)/, "").replace("complaint-coordinator", "").toUpperCase();
+    return dept ? `LGU Staff (${dept})` : "LGU Staff";
   }
 
   return roleNames[role] || role;
@@ -744,7 +724,7 @@ try {
               // Unified dashboard route for all roles
               const href = "/dashboard";
               if (dashboardBtn) dashboardBtn.setAttribute("href", href);
-            } catch {}
+            } catch { }
           } else {
             // Not authenticated, show unauthenticated buttons
             if (unauthEl) unauthEl.classList.remove("hidden");
@@ -772,14 +752,14 @@ try {
               },
               { once: true }
             );
-          } catch {}
+          } catch { }
         }
       })();
-    } catch {}
+    } catch { }
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initializeHeaderAuthUI);
   } else {
     initializeHeaderAuthUI();
   }
-} catch {}
+} catch { }

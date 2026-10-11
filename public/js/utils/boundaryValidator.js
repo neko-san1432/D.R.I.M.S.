@@ -26,10 +26,10 @@ async function loadDigosBoundary() {
     try {
       let response;
 
-      // 1. Try to use barangay boundaries from /api/boundaries (Visual Source)
+      // 1. Try to use barangay boundaries from /api/public/boundaries (Visual Source)
       // This ensures validation matches exactly what the user sees
       try {
-        response = await fetch("/api/boundaries");
+        response = await fetch("/api/public/boundaries");
         if (response.ok) {
           const brgyData = await response.json();
           if (Array.isArray(brgyData) && brgyData.length > 0) {
@@ -67,7 +67,7 @@ async function loadDigosBoundary() {
 
       // 3. Final fallback: try direct file path (may not work in production)
       try {
-        response = await fetch("/assets/json/digos-city-boundary.json");
+        response = await fetch("/assets/json/digosCityBoundary.json");
         if (response.ok) {
           const boundary = await response.json();
           boundaryCache = boundary;
@@ -134,12 +134,15 @@ function calculateBoundsFromBarangays(brgyData) {
  * @returns {boolean}
  */
 function isPointInRing(point, ring) {
-  const [x, y] = point;
+  const x = Number(point[0]);
+  const y = Number(point[1]);
   let inside = false;
 
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+    const xi = Number(ring[i][0]);
+    const yi = Number(ring[i][1]);
+    const xj = Number(ring[j][0]);
+    const yj = Number(ring[j][1]);
 
     const intersectY = yi > y !== yj > y;
     const intersectX = x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
@@ -183,6 +186,39 @@ function isPointInPolygon(point, coordinates) {
 }
 
 /**
+ * Recursively check if a point is inside a GeoJSON object
+ * @param {Array} point - [longitude, latitude]
+ * @param {Object} geojson - GeoJSON object (FeatureCollection, Feature, MultiPolygon, or Polygon)
+ * @returns {boolean}
+ */
+function isPointInGeoJSON(point, geojson) {
+  if (!geojson) return false;
+
+  // Handle FeatureCollection
+  if (geojson.type === "FeatureCollection" && Array.isArray(geojson.features)) {
+    return geojson.features.some(feature => isPointInGeoJSON(point, feature));
+  }
+
+  // Handle Feature
+  if (geojson.type === "Feature") {
+    return isPointInGeoJSON(point, geojson.geometry);
+  }
+
+  // Handle MultiPolygon
+  if (geojson.type === "MultiPolygon" && Array.isArray(geojson.coordinates)) {
+    return geojson.coordinates.some(polygonCoords => isPointInPolygon(point, polygonCoords));
+  }
+
+  // Handle Polygon
+  if (geojson.type === "Polygon" && Array.isArray(geojson.coordinates)) {
+    return isPointInPolygon(point, geojson.coordinates);
+  }
+
+  // Unsupported or empty geometry
+  return false;
+}
+
+/**
  * Validate if coordinates are within Digos City boundary
  * @param {number} latitude - Latitude coordinate
  * @param {number} longitude - Longitude coordinate
@@ -198,115 +234,45 @@ async function isWithinDigosBoundary(latitude, longitude) {
     return false;
   }
 
-  // Load boundary
-  const boundary = await loadDigosBoundary();
+  // 1. Try to use already loaded boundaries from window (fastest & most reliable)
+  let boundary = boundaryCache;
+  if (!boundary && typeof window !== "undefined" && window.complaintFormBoundaries) {
+    boundary = {
+      type: "barangay_boundaries",
+      barangays: window.complaintFormBoundaries,
+    };
+    boundaryCache = boundary;
+  }
+
+  // 2. Load boundary if not available
   if (!boundary) {
-    // Use bounding box fallback if boundary not available
-    const minLat = 6.65;
-    const maxLat = 7.0;
-    const minLng = 125.2;
-    const maxLng = 125.5;
-    return (
-      latitude >= minLat &&
-      latitude <= maxLat &&
-      longitude >= minLng &&
-      longitude <= maxLng
-    );
+    boundary = await loadDigosBoundary();
+  }
+
+  if (!boundary) {
+    console.error("[BOUNDARY_VALIDATOR] Critical: Boundary data unavailable.");
+    return false;
   }
 
   const point = [longitude, latitude]; // GeoJSON uses [lng, lat] order
 
-  // Handle barangay boundaries format (from /api/boundaries)
-  let isValid = false;
-
+  // Check against barangay boundaries
   if (boundary.type === "barangay_boundaries" && boundary.barangays) {
-    isValid = _checkBarangayBoundaries(boundary, point, latitude, longitude);
-  } else if (boundary.geometry?.coordinates) {
-    // Handle standard GeoJSON boundary format
-    isValid = _checkGeoJsonBoundary(boundary, point);
-  } else {
-    console.warn("[BOUNDARY_VALIDATOR] Invalid boundary format");
-    isValid = true; // Fail open if boundary format invalid
-  }
-
-  // Double-Safety: If polygon check failed, check permissive bounding box
-  // This handles edge cases where visual boundary might differ slightly from validation data
-  if (!isValid) {
-    const minLat = 6.65;
-    const maxLat = 7.0;
-    const minLng = 125.2;
-    const maxLng = 125.5;
-
-    if (
-      latitude >= minLat &&
-      latitude <= maxLat &&
-      longitude >= minLng &&
-      longitude <= maxLng
-    ) {
-      console.log(
-        "[BOUNDARY_VALIDATOR] Polygon check failed but within permissive bounds. allowing."
-      );
-      return true;
-    }
-  }
-
-  return isValid;
+    return boundary.barangays.some(barangay => isPointInGeoJSON(point, barangay.geojson));
+  } 
+  
+  // Check against standard GeoJSON boundary
+  return isPointInGeoJSON(point, boundary);
 }
 
 function _checkBarangayBoundaries(boundary, point, latitude, longitude) {
-  // Check if point is within any barangay boundary
-  for (const barangay of boundary.barangays) {
-    if (barangay.geojson?.geometry) {
-      const coords = barangay.geojson.geometry.coordinates;
-      if (barangay.geojson.geometry.type === "Polygon") {
-        if (isPointInPolygon(point, coords)) {
-          return true;
-        }
-      } else if (barangay.geojson.geometry.type === "MultiPolygon") {
-        for (const polygon of coords) {
-          if (isPointInPolygon(point, polygon)) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-  // If not in any barangay, check bounding box as fallback
-  if (boundary.bounds) {
-    return (
-      latitude >= boundary.bounds.minLat &&
-      latitude <= boundary.bounds.maxLat &&
-      longitude >= boundary.bounds.minLng &&
-      longitude <= boundary.bounds.maxLng
-    );
-  }
-  return false;
+  // This is now handled inside isWithinDigosBoundary using .some()
+  return boundary.barangays.some(barangay => isPointInGeoJSON(point, barangay.geojson));
 }
 
 function _checkGeoJsonBoundary(boundary, point) {
-  const { coordinates } = boundary.geometry;
-
-  // Handle Polygon geometry type
-  if (boundary.geometry.type === "Polygon") {
-    return isPointInPolygon(point, coordinates);
-  }
-
-  // Handle MultiPolygon geometry type
-  if (boundary.geometry.type === "MultiPolygon") {
-    // MultiPolygon: [[[ring1], [ring2]], [[ring3]]]
-    for (const polygon of coordinates) {
-      if (isPointInPolygon(point, polygon)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  console.warn(
-    "[BOUNDARY_VALIDATOR] Unsupported geometry type:",
-    boundary.geometry.type
-  );
-  return true; // Fail open if geometry type not supported
+  // This is now handled inside isWithinDigosBoundary
+  return isPointInGeoJSON(point, boundary);
 }
 
 /**

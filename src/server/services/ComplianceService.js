@@ -3,7 +3,7 @@ const AuditLogRepository = require("../repositories/AuditLogRepository");
 
 class ComplianceService {
   constructor() {
-    this.db = new Database();
+    this.db = Database.getInstance();
     this.supabase = this.db.getClient();
     this.auditLog = new AuditLogRepository();
   }
@@ -162,8 +162,8 @@ class ComplianceService {
       });
 
       // Delete related data (respect FK order)
-      await safeDelete("notification", "user_id");
-      await safeDelete("notification", "owner");
+      await safeDelete("notifications", "user_id");
+      await safeDelete("notifications", "owner");
       await safeDelete("user_sessions", "user_id");
 
       await safeDelete("complaint_assignments", "assigned_to", "complaint_assignments.assigned_to");

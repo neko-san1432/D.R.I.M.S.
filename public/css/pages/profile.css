@@ -1,0 +1,254 @@
+/* Profile Revamp V2 - Premium Dark Glassmorphism & Squeezed Viewport Fitted */
+
+body {
+  background-color: #0b0f19 !important; /* Deep dark navy/slate background */
+  color: #f9fafb;
+  font-family: 'Source Sans 3', sans-serif;
+  overflow: hidden !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  box-sizing: border-box;
+}
+
+#app {
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  box-sizing: border-box;
+}
+
+#app .dashboard-main-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0 !important;
+  overflow: hidden !important; /* NO outer scrollbars!!! */
+  padding: 0 !important;
+  max-height: calc(100vh - var(--header-height-desktop, 56px)) !important;
+  box-sizing: border-box;
+}
+
+.profile-page-container {
+  display: grid;
+  grid-template-columns: 320px 1fr; /* Slightly squeezed sidebar width from 350px to 320px */
+  gap: 1.5rem;
+  padding: 1.25rem 2rem; /* Match settings exactly */
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0 !important;
+  overflow: hidden !important; /* NO outer scrollbars!!! */
+}
+
+/* Custom Scrollbar Styling */
+#activity-list::-webkit-scrollbar,
+.profile-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+#activity-list::-webkit-scrollbar-track,
+.profile-sidebar::-webkit-scrollbar-track {
+  background: rgba(11, 15, 25, 0.4);
+  border-radius: 8px;
+}
+
+#activity-list::-webkit-scrollbar-thumb,
+.profile-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+
+#activity-list::-webkit-scrollbar-thumb:hover,
+.profile-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+  overflow: hidden;
+}
+
+/* Subtle top glow border for aside */
+.profile-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem; /* Squeezed padding */
+  height: fit-content;
+  max-height: 100%;
+  overflow-y: auto; /* Allow sidebar to scroll internally if screen is short */
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.profile-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8b5cf6, #3b82f6, #6366f1);
+  opacity: 0.8;
+}
+
+.avatar-large {
+  width: 80px; /* Squeezed avatar */
+  height: 80px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: white;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.profile-name {
+  font-size: 1.25rem; /* Squeezed name */
+  font-weight: 700;
+  color: #f9fafb;
+  margin-top: 0.5rem;
+  margin-bottom: 0.15rem;
+  line-height: 1.2;
+}
+
+.profile-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.75rem; /* Squeezed badge */
+  background: rgba(88, 28, 135, 0.6);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem; /* Squeezed gap */
+  width: 100%;
+}
+
+.stat-item {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.5rem; /* Squeezed padding */
+  border-radius: 0.65rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-value {
+  display: block;
+  font-size: 1.1rem; /* Squeezed stat value */
+  font-weight: 700;
+  color: #f9fafb;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.6rem; /* Squeezed stat label */
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.15rem;
+}
+
+/* Main Content Area */
+.profile-main-content {
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  overflow: hidden !important; /* Lock main card */
+  flex: 1;
+  min-height: 0 !important;
+  box-sizing: border-box;
+}
+
+.profile-reports-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+#activity-list {
+  flex: 1;
+  min-height: 0 !important;
+  overflow-y: auto !important; /* THIS IS THE ONLY ELEMENT THAT SCROLLS!!! */
+  padding-right: 0.5rem;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 1024px) {
+  #app .dashboard-main-wrapper {
+    overflow-y: auto !important; /* Allow outer wrapper to scroll naturally on mobile */
+    max-height: none !important;
+    padding-bottom: 5rem !important; /* CRITICAL: Clearance for fixed bottom navigation bar */
+  }
+  .profile-page-container {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem 1rem 5rem 1rem !important; /* CRITICAL: Extra bottom padding so content sits above bottom nav */
+    overflow-y: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  .profile-main-content {
+    order: 1; /* Activity List comes FIRST at the top on mobile */
+    flex: none !important; /* CRITICAL: Remove flex: 1 so container expands fully around content */
+    height: auto !important;
+    min-height: 380px !important; /* Ensure enough height for empty state */
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .profile-reports-section {
+    flex: none !important; /* CRITICAL: Remove flex: 1 */
+    height: auto !important;
+    min-height: 300px !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .profile-sidebar {
+    order: 2; /* Sidebar is placed BELOW on mobile */
+    flex: none !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin-top: 1rem;
+  }
+  #activity-list {
+    flex: none !important; /* CRITICAL: Remove flex: 1 */
+    overflow-y: visible !important;
+    height: auto !important;
+    min-height: 250px !important;
+    max-height: none !important;
+  }
+}

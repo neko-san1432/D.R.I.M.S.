@@ -1,6 +1,6 @@
 const express = require("express");
-const AuthController = require("../controllers/AuthController");
-const OAuthController = require("../controllers/OAuthController");
+const authController = require("../controllers/AuthController");
+const oauthController = require("../controllers/OAuthController");
 const { authenticateUser } = require("../middleware/auth");
 const { ErrorHandler } = require("../middleware/errorHandler");
 const { csrfProtection, generateCsrfToken } = require("../middleware/csrf");
@@ -27,7 +27,7 @@ const router = express.Router();
 router.post(
   "/signup",
   authLimiter,
-  ErrorHandler.asyncWrapper(AuthController.signup)
+  ErrorHandler.asyncWrapper(authController.signup)
 );
 /**
  * @route   POST /api/auth/signup-with-code
@@ -37,7 +37,7 @@ router.post(
 router.post(
   "/signup-with-code",
   authLimiter,
-  ErrorHandler.asyncWrapper(AuthController.signupWithCode)
+  ErrorHandler.asyncWrapper(authController.signupWithCode)
 );
 /**
  * @route   POST /api/auth/login
@@ -47,8 +47,29 @@ router.post(
 router.post(
   "/login",
   loginLimiter,
-  ErrorHandler.asyncWrapper(AuthController.login)
+  ErrorHandler.asyncWrapper(authController.login)
 );
+
+/**
+ * @route   GET /api/auth/login
+ * @desc    Trap for invalid GET requests to login (debugging)
+ * @access  Public
+ */
+router.get("/login", (req, res) => {
+  console.warn("[DEBUG] ⚠️ Caught GET /api/auth/login request. This should be POST.");
+  console.warn("[DEBUG] Headers:", JSON.stringify(req.headers, null, 2));
+  console.warn("[DEBUG] Query:", req.query);
+
+  // Check if this might be a redirect loop or cached 301
+  // BE-14 FIX: isBrowser was assigned but never used, removed
+
+  res.status(405).json({
+    success: false,
+    error: "Method Not Allowed. Login requires POST request.",
+    detail: "Your browser sent a GET request. This may be due to a cached redirect or incorrect form submission.",
+    help: "Clear browser cache or try a private/incognito window."
+  });
+});
 
 /**
  * @route   GET /api/auth/verify-email
@@ -58,7 +79,7 @@ router.post(
 router.get(
   "/verify-email",
   authLimiter,
-  ErrorHandler.asyncWrapper(AuthController.verifyEmail)
+  ErrorHandler.asyncWrapper(authController.verifyEmail)
 );
 /**
  * @route   POST /api/auth/forgot-password
@@ -78,7 +99,14 @@ router.post(
           error: "Email is required",
         });
       }
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const useHttps = process.env.USE_HTTPS === "true" || process.env.USE_HTTPS === "1";
+      const explicitFrontendUrl = process.env.FRONTEND_URL;
+      const requestBaseUrl = `${useHttps ? "https" : req.protocol}://${req.get("host")}`;
+      let frontendUrl = explicitFrontendUrl || requestBaseUrl;
+      if (useHttps && frontendUrl.startsWith("http://")) {
+        frontendUrl = `https://${frontendUrl.slice("http://".length)}`;
+      }
+      frontendUrl = frontendUrl.replace(/\/$/, "");
       const redirectTo = `${frontendUrl}/reset-password`;
       // resetPasswordForEmail requires the anon key, not the service role key
       // Create a client with the anon key for this operation
@@ -174,10 +202,10 @@ router.post(
           error: "Passwords do not match",
         });
       }
-      if (password.length < 4) {
+      if (password.length < 8) {
         return res.status(400).json({
           success: false,
-          error: "Password must be at least 4 characters",
+          error: "Password must be at least 8 characters",
         });
       }
       // Verify reset token
@@ -251,7 +279,7 @@ router.post(
 router.get(
   "/profile",
   authenticateUser,
-  ErrorHandler.asyncWrapper(AuthController.getProfile)
+  ErrorHandler.asyncWrapper(authController.getprofile)
 );
 /**
  * @route   PUT /api/auth/profile
@@ -261,7 +289,7 @@ router.get(
 router.put(
   "/profile",
   authenticateUser,
-  ErrorHandler.asyncWrapper(AuthController.updateProfile)
+  ErrorHandler.asyncWrapper(authController.updateprofile)
 );
 /**
  * @route   POST /api/auth/request-password-change
@@ -273,7 +301,7 @@ router.post(
   authenticateUser,
   authLimiter,
   csrfProtection,
-  ErrorHandler.asyncWrapper(AuthController.requestPasswordChange)
+  ErrorHandler.asyncWrapper(authController.requestPasswordChange)
 );
 /**
  * @route   GET /api/auth/confirm-password-change
@@ -282,7 +310,7 @@ router.post(
  */
 router.get(
   "/confirm-password-change",
-  ErrorHandler.asyncWrapper(AuthController.confirmPasswordChange)
+  ErrorHandler.asyncWrapper(authController.confirmPasswordChange)
 );
 /**
  * @route   POST /api/auth/change-password
@@ -294,7 +322,7 @@ router.post(
   authenticateUser,
   authLimiter,
   csrfProtection,
-  ErrorHandler.asyncWrapper(AuthController.changePassword)
+  ErrorHandler.asyncWrapper(authController.changePassword)
 );
 /**
  * @route   POST /api/auth/request-email-change
@@ -306,7 +334,7 @@ router.post(
   authenticateUser,
   authLimiter,
   csrfProtection,
-  ErrorHandler.asyncWrapper(AuthController.requestEmailChange)
+  ErrorHandler.asyncWrapper(authController.requestEmailChange)
 );
 /**
  * @route   POST /api/auth/invalidate-all-sessions
@@ -318,7 +346,7 @@ router.post(
   authenticateUser,
   authLimiter,
   csrfProtection,
-  ErrorHandler.asyncWrapper(AuthController.invalidateAllSessions)
+  ErrorHandler.asyncWrapper(authController.invalidateAllSessions)
 );
 /**
  * @route   POST /api/auth/logout
@@ -328,7 +356,7 @@ router.post(
 router.post(
   "/logout",
   authenticateUser,
-  ErrorHandler.asyncWrapper(AuthController.logout)
+  ErrorHandler.asyncWrapper(authController.logout)
 );
 /**
  * @route   POST /api/auth/complete-oauth
@@ -339,7 +367,7 @@ router.post(
   "/complete-oauth",
   authenticateUser,
   authLimiter,
-  ErrorHandler.asyncWrapper(AuthController.completeOAuth)
+  ErrorHandler.asyncWrapper(authController.completeOAuth)
 );
 /**
  * @route   POST /api/auth/complete-oauth-hr
@@ -350,7 +378,7 @@ router.post(
   "/complete-oauth-hr",
   authenticateUser,
   authLimiter,
-  ErrorHandler.asyncWrapper(AuthController.completeOAuthHR)
+  ErrorHandler.asyncWrapper(authController.completeOAuthHR)
 );
 /**
  * @route   GET /api/auth/oauth-status
@@ -361,7 +389,7 @@ router.get(
   "/oauth-status",
   authenticateUser,
   authLimiter,
-  ErrorHandler.asyncWrapper(OAuthController.checkOAuthStatus)
+  ErrorHandler.asyncWrapper(oauthController.checkOAuthStatus)
 );
 /**
  * @route   DELETE /api/auth/oauth-incomplete
@@ -372,7 +400,7 @@ router.delete(
   "/oauth-incomplete",
   authenticateUser,
   authLimiter,
-  ErrorHandler.asyncWrapper(OAuthController.deleteIncompleteSignup)
+  ErrorHandler.asyncWrapper(oauthController.deleteIncompleteSignup)
 );
 /**
  * @route   GET /api/auth/sessions

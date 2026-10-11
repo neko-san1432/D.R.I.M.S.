@@ -1,7 +1,26 @@
-node_modules
+﻿node_modules
 .env
 codeql-results
 eng.traineddata
 /implementation_plans
 emails
 separate_module
+
+# AI Cache
+storage/ai_cache/
+.brain_logic
+# Application logs
+log.txt
+secrets-found.txt
+
+# Standalone utilities
+standalone-map-viewer/
+
+# Ignore Windows NUL device file
+nul
+
+# Dev HTTPS certs (never commit private keys)
+certs/*.pem
+certs/*.key
+certs/*.crt
+tmp/

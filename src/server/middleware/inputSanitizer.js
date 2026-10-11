@@ -51,7 +51,17 @@ class InputSanitizer {
       // Don't sanitize key using values logic (avoids triggering email validation on the key 'email' itself)
       const sanitizedKey = safeKey;
       const fieldPath = context ? `${context}.${safeKey}` : safeKey;
-      sanitized[sanitizedKey] = InputSanitizer.sanitizeValue(value, fieldPath);
+
+      // Handle arrays and objects recursively, only sanitize primitives
+      if (Array.isArray(value)) {
+        sanitized[sanitizedKey] = value.map((item, index) =>
+          InputSanitizer.sanitizeObject(item, `${fieldPath}[${index}]`)
+        );
+      } else if (typeof value === "object" && value !== null) {
+        sanitized[sanitizedKey] = InputSanitizer.sanitizeObject(value, fieldPath);
+      } else {
+        sanitized[sanitizedKey] = InputSanitizer.sanitizeValue(value, fieldPath);
+      }
     }
     return sanitized;
   }
@@ -76,13 +86,17 @@ class InputSanitizer {
     if (value === null || value === void 0) {
       return value;
     }
-    // Convert to string for processing
-    const stringValue = String(value);
-    // Check for potential security threats first
-    if (InputSanitizer.detectThreats(stringValue, fieldName)) {
-      // Silenced noisy sanitizer warnings per request; still sanitize by returning empty string
-      return "";
+
+    // Handle arrays and objects - they should be processed by sanitizeObject, not here
+    if (Array.isArray(value)) {
+      return value.map((item, index) =>
+        InputSanitizer.sanitizeObject(item, `${fieldName}[${index}]`)
+      );
     }
+    if (typeof value === "object") {
+      return InputSanitizer.sanitizeObject(value, fieldName);
+    }
+
     // Skip sanitization for certain field types that shouldn't be modified
     const skipFields = [
       "password",
@@ -98,6 +112,14 @@ class InputSanitizer {
       )
     ) {
       return value; // Return original value for sensitive fields
+    }
+
+    // Convert to string for processing (only for primitives)
+    const stringValue = String(value);
+    // Check for potential security threats first
+    if (InputSanitizer.detectThreats(stringValue, fieldName)) {
+      // Silenced noisy sanitizer warnings per request; still sanitize by returning empty string
+      return "";
     }
     // Sanitize based on field name patterns
     if (fieldName.toLowerCase().includes("email")) {
@@ -367,22 +389,50 @@ class InputSanitizer {
   }
   // Enhanced SQL injection prevention
   static preventSQLInjection(req, res, next) {
+    // Skip SQL injection checks for routes that process user-generated complaint
+    // text. These contain natural language (English/Filipino) with common words
+    // like "select", "update", "delete" that trigger false positives.
+    const exemptPaths = [
+      "/api/nlp/pending-reviews/batch",
+      "/api/nlp/proposals",
+      "/api/complaints",
+      "/api/coordinator/complaints",
+      "/api/lgu/complaints",
+    ];
+    if (exemptPaths.some((p) => req.originalUrl.startsWith(p))) {
+      return next();
+    }
+
     const sqlPatterns = [
-      /(\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b)/gi,
+      // Multi-keyword injection patterns (more specific than single-word matches)
+      /\b(union\s+(all\s+)?select)\b/gi,
+      /\b(insert\s+into)\b/gi,
+      /\b(update\s+\w+\s+set)\b/gi,
+      /\b(delete\s+from)\b/gi,
+      /\b(drop\s+(table|database|index))\b/gi,
+      /\b(create\s+(table|database|index))\b/gi,
+      /\b(alter\s+table)\b/gi,
+      /\b(exec(ute)?\s*\()\b/gi,
+      // Comment / terminator injection
       /(--|#|\/\*|\*\/)/g,
+      // Tautology patterns
       /(\bor\b\s+\d+\s*=\s*\d+)/gi,
       /(\band\b\s+\d+\s*=\s*\d+)/gi,
+      // Dangerous functions
       /(\b(load_file|into\s+outfile|into\s+dumpfile)\b)/gi,
-      /(\b(concat|group_concat|char|ascii|ord|hex|unhex)\b)/gi,
+      /(\b(group_concat|char\s*\(|ascii\s*\(|unhex\s*\())/gi,
       /(\b(benchmark|sleep|waitfor\s+delay)\b)/gi,
     ];
 
     const checkForSQLInjection = (obj, path = "") => {
       if (typeof obj === "string") {
-        const hasThreat = sqlPatterns.some((pattern) => pattern.test(obj));
+        const hasThreat = sqlPatterns.some((pattern) => {
+          pattern.lastIndex = 0; // Reset regex state for global patterns
+          return pattern.test(obj);
+        });
         if (hasThreat) {
           console.warn(
-            `[SECURITY] SQL injection attempt detected in ${path}: ${obj.substring(
+            `[security] SQL injection attempt detected in ${path}: ${obj.substring(
               0,
               100
             )}...`
@@ -432,7 +482,7 @@ class InputSanitizer {
         const hasThreat = xssPatterns.some((pattern) => pattern.test(obj));
         if (hasThreat) {
           console.warn(
-            `[SECURITY] XSS attempt detected in ${path}: ${obj.substring(
+            `[security] XSS attempt detected in ${path}: ${obj.substring(
               0,
               100
             )}...`
@@ -515,7 +565,7 @@ class InputSanitizer {
       const allowedProtocols = ["http:", "https:", "ftp:", "ftps:"];
       if (!allowedProtocols.includes(url.protocol)) {
         console.warn(
-          `[SECURITY] Disallowed protocol detected: ${url.protocol}`
+          `[security] Disallowed protocol detected: ${url.protocol}`
         );
         return "";
       }
@@ -537,7 +587,7 @@ class InputSanitizer {
       ];
       if (suspiciousPatterns.some((pattern) => pattern.test(trimmedUrl))) {
         console.warn(
-          `[SECURITY] Suspicious URL pattern detected: ${trimmedUrl.substring(
+          `[security] Suspicious URL pattern detected: ${trimmedUrl.substring(
             0,
             100
           )}...`
@@ -547,7 +597,7 @@ class InputSanitizer {
       // Check for protocol confusion attacks (e.g., "http:javascript:alert(1)")
       if (url.protocol !== `${trimmedUrl.split(":")[0]}:`) {
         console.warn(
-          `[SECURITY] Protocol confusion detected: ${trimmedUrl.substring(
+          `[security] Protocol confusion detected: ${trimmedUrl.substring(
             0,
             100
           )}...`
@@ -567,7 +617,7 @@ class InputSanitizer {
           const num = parseInt(part, 10);
           if (num < 0 || num > 255) {
             console.warn(
-              `[SECURITY] Invalid IP address detected: ${url.hostname}`
+              `[security] Invalid IP address detected: ${url.hostname}`
             );
             return "";
           }
@@ -586,7 +636,7 @@ class InputSanitizer {
       ];
       if (privateRanges.some((range) => range.test(url.hostname))) {
         console.warn(
-          `[SECURITY] Private/localhost URL detected: ${url.hostname}`
+          `[security] Private/localhost URL detected: ${url.hostname}`
         );
         return "";
       }
@@ -595,7 +645,7 @@ class InputSanitizer {
     } catch (error) {
       // If URL constructor fails, the URL is invalid
       console.warn(
-        `[SECURITY] Invalid URL format: ${trimmedUrl.substring(0, 100)}...`
+        `[security] Invalid URL format: ${trimmedUrl.substring(0, 100)}...`
       );
       return "";
     }

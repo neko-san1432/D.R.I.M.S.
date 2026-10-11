@@ -13,8 +13,9 @@ class LguOfficerController {
     try {
       const userId = req.user.id;
       const { status, priority, limit } = req.query;
+      const {department} = req.user;
 
-      const tasks = await this.officerService.getAssignedTasks(userId, { status, priority, limit });
+      const tasks = await this.officerService.getAssignedTasks(userId, { status, priority, limit, department });
 
       return res.json({
         success: true,
@@ -38,7 +39,7 @@ class LguOfficerController {
 
       return res.json({
         success: true,
-        message: "Complaint marked as resolved successfully",
+        message: "complaint marked as resolved successfully",
         complaint
       });
     } catch (error) {
@@ -155,6 +156,31 @@ class LguOfficerController {
       });
     } catch (error) {
       console.error("[LGU_OFFICER] Get updates error:", error);
+      return ErrorHandler.handleApiError(error, req, res, "LGU_OFFICER");
+    }
+  }
+  /**
+   * Update complaint status with comment (Generic LGU Action)
+   */
+  async updatecomplaintStatus(req, res) {
+    try {
+      const { complaintId } = req.params;
+      const { status, comment } = req.body;
+      const userId = req.user.id;
+
+      if (!status || !comment) {
+        return res.status(400).json({ success: false, error: "Status and comment are required" });
+      }
+
+      const complaint = await this.officerService.updatecomplaintStatus(complaintId, userId, status, comment);
+
+      return res.json({
+        success: true,
+        message: "Status updated successfully",
+        data: complaint
+      });
+    } catch (error) {
+      console.error("[LGU_OFFICER] Update status error:", error);
       return ErrorHandler.handleApiError(error, req, res, "LGU_OFFICER");
     }
   }

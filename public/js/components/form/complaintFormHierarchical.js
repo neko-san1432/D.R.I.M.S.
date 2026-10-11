@@ -1,11 +1,11 @@
 /**
- * Hierarchical Complaint Form Controller
+ * Hierarchical complaint Form Controller
  * Handles category -> subcategory -> department selection
  */
-import { handleComplaintSubmit, resetComplaintForm } from "./formSubmission.js";
+import { handlecomplaintSubmit, resetcomplaintForm } from "./formSubmission.js";
 import { setupRealtimeValidation } from "../../utils/validation.js";
 import {
-  createComplaintFileHandler,
+  createcomplaintFileHandler,
   setupDragAndDrop,
 } from "../../utils/fileHandler.js";
 import showMessage from "../toast.js";
@@ -21,7 +21,7 @@ import { getUserRole } from "../../auth/authChecker.js";
  * Initialize hierarchical complaint form
  */
 
-export async function initializeComplaintForm() {
+export async function initializecomplaintForm() {
   const form = document.getElementById("complaintForm");
   if (!form) {
     console.error("[COMPLAINT FORM] Form element not found");
@@ -71,7 +71,7 @@ export async function initializeComplaintForm() {
     return;
   }
   // Initialize file handler with upload state callback
-  const fileHandler = createComplaintFileHandler({
+  const fileHandler = createcomplaintFileHandler({
     previewContainer: elements.filePreview,
     onFilesChange: (_files) => {
       // console.log removed for security
@@ -93,7 +93,7 @@ export async function initializeComplaintForm() {
   // Setup form functionality
   setupHierarchicalSelection(elements);
   setupFileHandling(elements.fileDropZone, elements.fileInput, fileHandler);
-  // Departments are now auto-assigned by NLP
+  // departments are now auto-assigned by NLP
   setupFormValidation(elements.form);
   setupFormSubmission(elements.form, fileHandler);
   loadCategories();
@@ -115,8 +115,6 @@ export async function initializeComplaintForm() {
   // Setup title auto-generation from description
   setupTitleAutoGeneration(form);
 
-  // Setup voice input
-  setupVoiceInput(form);
 
   // Setup duplicate detection
   setupDuplicateDetection(form);
@@ -241,7 +239,7 @@ function renderDuplicateWarning(
         </div>
         <p style="margin-bottom: 0.8rem; font-size: 0.9rem; color: #431407;">
             We found ${duplicates.length
-    } similar report(s) near this location. Please check if your issue is already listed.
+} similar report(s) near this location. Please check if your issue is already listed.
             If matched, you can click <strong>"Me Too"</strong> to support the existing report instead of creating a new one.
         </p>
         <div class="duplicate-list">
@@ -289,16 +287,16 @@ function renderBlockingUI(container, duplicates, form) {
         </div>
         <p style="margin-bottom: 0.8rem; font-size: 0.9rem; color: #7f1d1d; font-weight: 500;">
             We have detected a <strong>high number of reports (${duplicates.length
-    })</strong> for this issue in this area.
+})</strong> for this issue in this area.
             <br/><br/>
             To help our coordinators respond faster, we have paused new submissions. 
             <strong>Please UPVOTE an existing report below</strong> to add urgency to this issue.
         </p>
         <div class="duplicate-list">
             ${duplicates
-      .slice(0, 3)
-      .map((d) => renderDuplicateItem(d))
-      .join("")}
+    .slice(0, 3)
+    .map((d) => renderDuplicateItem(d))
+    .join("")}
         </div>
         <div class="dismiss-warning">
             <span style="font-size: 0.8rem; color: #6b7280;">(Submitting new reports is temporarily disabled for this area)</span>
@@ -315,21 +313,21 @@ function renderDuplicateItem(d) {
   return `
         <div class="duplicate-item">
             <div class="duplicate-info">
-                <span class="duplicate-title">${d.title || "Untitled Complaint"
-    }</span>
+                <span class="duplicate-title">${d.title || "Untitled complaint"
+}</span>
                 <div class="duplicate-meta">
                     <span>📅 ${new Date(
-      d.submitted_at || d.created_at
-    ).toLocaleDateString()}</span>
+    d.submitted_at || d.created_at
+  ).toLocaleDateString()}</span>
                     <span>•</span>
                     <span>📍 ${(d.distance * 1000).toFixed(0)}m away</span>
                     <span style="display: block; margin-top: 4px; color: #4b5563;">
                         ${d.description
-      ? d.description.length > 80
-        ? d.description.substring(0, 80) + "..."
-        : d.description
-      : "No description"
-    }
+    ? d.description.length > 80
+      ? `${d.description.substring(0, 80)  }...`
+      : d.description
+    : "No description"
+}
                     </span>
                 </div>
             </div>
@@ -346,7 +344,7 @@ function attachUpvoteListeners(container) {
   const upvoteButtons = container.querySelectorAll(".btn-me-too");
   upvoteButtons.forEach((btn) => {
     btn.addEventListener("click", async (e) => {
-      const id = e.currentTarget.dataset.id;
+      const {id} = e.currentTarget.dataset;
       // Optimistic UI update
       const originalText = e.currentTarget.innerHTML;
       e.currentTarget.innerHTML = "<span>Checking...</span>";
@@ -405,7 +403,7 @@ function setupTitleAutoGeneration(form) {
       // Create title from first few words (approx 50 chars)
       let title = desc.split(/\s+/).slice(0, 10).join(" ");
       if (title.length > 50) {
-        title = title.substring(0, 47) + "...";
+        title = `${title.substring(0, 47)  }...`;
       }
       // Ensure specific format if needed, or just clean it
       titleInput.value = title.charAt(0).toUpperCase() + title.slice(1);
@@ -419,143 +417,7 @@ function setupTitleAutoGeneration(form) {
   descriptionInput.addEventListener("blur", updateTitle); // Ensure final update
 }
 
-/**
- * Setup Voice Input using Web Speech API
- */
-/**
- * Setup Voice Input using Web Speech API
- */
-function setupVoiceInput(form) {
-  const micBtn = form.querySelector("#startSpeech");
-  const langSelect = form.querySelector("#voiceLanguage");
-  const descriptionInput = form.querySelector("#description");
 
-  if (!micBtn || !descriptionInput) return;
-
-  // Check browser support
-  if (
-    !("webkitSpeechRecognition" in window) &&
-    !("SpeechRecognition" in window)
-  ) {
-    micBtn.style.display = "none";
-    if (langSelect) langSelect.style.display = "none";
-    return;
-  }
-
-  const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
-
-  recognition.continuous = false; // Stop after one sentence/pause
-  recognition.interimResults = true;
-
-  let isListening = false;
-
-  micBtn.addEventListener("click", () => {
-    // Check for Secure Context (HTTPS or localhost)
-    if (!window.isSecureContext) {
-      showMessage(
-        "error",
-        "Microphone access requires a secure connection (HTTPS) or localhost. Please use http://localhost:3000 if testing locally."
-      );
-      return;
-    }
-
-    if (isListening) {
-      recognition.stop();
-      return;
-    }
-
-    // Set language from selector
-    if (langSelect) {
-      recognition.lang = langSelect.value;
-    }
-
-    try {
-      recognition.start();
-      isListening = true;
-      micBtn.classList.add("listening");
-      micBtn.style.background = "rgba(220, 38, 38, 0.2)"; // Red tint
-      micBtn.style.color = "#ef4444"; // Red color
-
-      // Visual feedback with language specific hint
-      const lang = langSelect ? langSelect.value : "en-US";
-      let hint = "Listening... Speak now";
-      if (lang === "tl-PH" || lang === "ceb-PH") {
-        hint = "Listening... (Speak clearly in the selected language)";
-      }
-      showMessage("info", hint);
-    } catch (e) {
-      console.error("Speech recognition error:", e);
-      isListening = false;
-      showMessage("error", "Unable to start speech recognition.");
-    }
-  });
-
-  recognition.onresult = (event) => {
-    let finalTranscript = "";
-    let interimTranscript = "";
-
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      if (event.results[i].isFinal) {
-        finalTranscript += event.results[i][0].transcript;
-      } else {
-        interimTranscript += event.results[i][0].transcript;
-      }
-    }
-
-    // Determine where to insert (at cursor or append)
-    // For simplicity, we just append or replace
-    // Better UX: Append with space
-    if (finalTranscript) {
-      const curentVal = descriptionInput.value;
-      // If empty, just set. If not, append.
-      const newVal = curentVal
-        ? curentVal.trim() + " " + finalTranscript.trim()
-        : finalTranscript.trim();
-      descriptionInput.value = newVal;
-
-      // Trigger input event for auto-resize and title generation
-      descriptionInput.dispatchEvent(new Event("input"));
-    }
-  };
-
-  recognition.onerror = (event) => {
-    console.warn("Speech recognition error", event.error);
-    isListening = false;
-    resetMicBtn(micBtn);
-
-    if (event.error === "not-allowed") {
-      if (!window.isSecureContext) {
-        showMessage(
-          "error",
-          "Microphone blocked due to insecure connection (HTTP). Please use localhost."
-        );
-      } else {
-        showMessage(
-          "error",
-          "Microphone access denied. Please check your browser permissions."
-        );
-      }
-    } else if (event.error === "no-speech") {
-      // Ignore no-speech error, just stop listening usually or show mild warning
-      // showMessage("info", "No speech detected.");
-    } else {
-      showMessage("error", `Speech recognition error: ${event.error}`);
-    }
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    resetMicBtn(micBtn);
-  };
-}
-
-function resetMicBtn(btn) {
-  btn.classList.remove("listening");
-  btn.style.background = "rgba(255, 255, 255, 0.1)";
-  btn.style.color = "inherit";
-}
 /**
  * Setup hierarchical category -> subcategory -> department selection
  */
@@ -565,7 +427,25 @@ function setupHierarchicalSelection(elements) {
   // Category selection handler
   categorySelect.addEventListener("change", async (e) => {
     const categoryId = e.target.value;
-    await loadSubcategories(categoryId, subcategorySelect);
+    const categoryText = e.target.options[e.target.selectedIndex].text.toLowerCase();
+    const isOthers = categoryText.includes("other");
+
+    const subcatGroup = subcategorySelect.closest(".form-group");
+
+    if (isOthers) {
+      // Clear and hide subcategory
+      subcategorySelect.innerHTML = '<option value="">No subcategory needed</option>';
+      subcategorySelect.value = "";
+      subcategorySelect.disabled = true;
+      subcategorySelect.required = false;
+      if (subcatGroup) subcatGroup.style.display = "none";
+    } else {
+      // Restore subcategory
+      subcategorySelect.disabled = false;
+      subcategorySelect.required = true;
+      if (subcatGroup) subcatGroup.style.display = "block";
+      await loadSubcategories(categoryId, subcategorySelect);
+    }
   });
   // Subcategory selection handler
   subcategorySelect.addEventListener("change", async (e) => {
@@ -638,7 +518,7 @@ async function loadSubcategories(categoryId, subcategorySelect) {
 /**
  * Auto-select appropriate departments when subcategory is selected
  */
-async function autoSelectAppropriateDepartments(
+async function autoSelectAppropriatedepartments(
   subcategoryId,
   departmentCheckboxes
 ) {
@@ -651,13 +531,13 @@ async function autoSelectAppropriateDepartments(
     if (error) throw error;
     if (data && data.length > 0) {
       // Find departments that are mapped to this subcategory
-      const mappedDepartments = data.filter(
+      const mappeddepartments = data.filter(
         (dept) =>
           dept.department_subcategory_mapping &&
           dept.department_subcategory_mapping.response_priority
       );
       // Auto-check mapped departments
-      mappedDepartments.forEach((dept) => {
+      mappeddepartments.forEach((dept) => {
         const checkbox = document.querySelector(`input[value="${dept.code}"]`);
         if (checkbox) {
           checkbox.checked = true;
@@ -666,12 +546,12 @@ async function autoSelectAppropriateDepartments(
       });
       // console.log removed for security
       // Show helpful message
-      if (mappedDepartments.length > 0) {
+      if (mappeddepartments.length > 0) {
         const suggestionMessage = document.createElement("div");
         suggestionMessage.className = "suggestion-message";
         suggestionMessage.innerHTML = `
           <div style="background: #e8f5e8; border: 1px solid #28a745; border-radius: 6px; padding: 12px; margin: 10px 0; color: #155724;">
-            <strong>💡 Suggested Departments:</strong> We've pre-selected departments that typically handle this type of complaint. You can uncheck any that don't apply to your specific situation.
+            <strong>💡 Suggested departments:</strong> We've pre-selected departments that typically handle this type of complaint. You can uncheck any that don't apply to your specific situation.
           </div>
         `;
         // Remove existing suggestion message if any
@@ -694,7 +574,7 @@ async function autoSelectAppropriateDepartments(
 /**
  * Load ALL departments (always show all, regardless of category/subcategory)
  */
-async function loadAllDepartments(departmentCheckboxes) {
+async function loadAlldepartments(departmentCheckboxes) {
   if (!departmentCheckboxes) return;
   try {
     departmentCheckboxes.innerHTML =
@@ -719,26 +599,26 @@ async function loadAllDepartments(departmentCheckboxes) {
       `;
       departmentCheckboxes.appendChild(searchContainer);
       // Group departments by level
-      const lguDepartments = data.filter((dept) => dept.level === "LGU");
-      const ngaDepartments = data.filter((dept) => dept.level === "NGA");
+      const lgudepartments = data.filter((dept) => dept.level === "LGU");
+      const ngadepartments = data.filter((dept) => dept.level === "NGA");
       // Create LGU section
-      if (lguDepartments.length > 0) {
+      if (lgudepartments.length > 0) {
         const lguSection = document.createElement("div");
         lguSection.className = "department-section";
         lguSection.innerHTML = "<h4>Local Government Units (LGU)</h4>";
-        lguDepartments.forEach((dept) => {
-          const checkbox = createDepartmentCheckbox(dept);
+        lgudepartments.forEach((dept) => {
+          const checkbox = createdepartmentCheckbox(dept);
           lguSection.appendChild(checkbox);
         });
         departmentCheckboxes.appendChild(lguSection);
       }
       // Create NGA section
-      if (ngaDepartments.length > 0) {
+      if (ngadepartments.length > 0) {
         const ngaSection = document.createElement("div");
         ngaSection.className = "department-section";
         ngaSection.innerHTML = "<h4>National Government Agencies (NGA)</h4>";
-        ngaDepartments.forEach((dept) => {
-          const checkbox = createDepartmentCheckbox(dept);
+        ngadepartments.forEach((dept) => {
+          const checkbox = createdepartmentCheckbox(dept);
           ngaSection.appendChild(checkbox);
         });
         departmentCheckboxes.appendChild(ngaSection);
@@ -751,7 +631,7 @@ async function loadAllDepartments(departmentCheckboxes) {
       suggestionMessage.className = "suggestion-message";
       suggestionMessage.innerHTML = `
         <div style="background: #e8f5e8; border: 1px solid #28a745; border-radius: 6px; padding: 12px; margin: 10px 0; color: #155724;">
-          <strong>💡 Department Selection (Optional):</strong> You can select departments that should handle your complaint. If none are selected, the system will route your complaint to appropriate departments automatically.
+          <strong>💡 department Selection (Optional):</strong> You can select departments that should handle your complaint. If none are selected, the system will route your complaint to appropriate departments automatically.
         </div>
       `;
       departmentCheckboxes.insertBefore(
@@ -759,7 +639,7 @@ async function loadAllDepartments(departmentCheckboxes) {
         departmentCheckboxes.firstChild
       );
       // Setup search functionality
-      setupDepartmentSearch(data);
+      setupdepartmentSearch(data);
       // No "None" option - users can simply leave all departments unchecked
     } else {
       departmentCheckboxes.innerHTML =
@@ -775,7 +655,7 @@ async function loadAllDepartments(departmentCheckboxes) {
 /**
  * Create department checkbox element
  */
-function createDepartmentCheckbox(department) {
+function createdepartmentCheckbox(department) {
   const wrapper = document.createElement("div");
   wrapper.className = "checkbox-wrapper";
   const checkbox = document.createElement("input");
@@ -855,15 +735,15 @@ function setupFormSubmission(form, fileHandler) {
       }
     }
     // Get selected departments (optional)
-    const selectedDepartments = Array.from(
+    const selecteddepartments = Array.from(
       form.querySelectorAll('input[name="departments"]:checked')
     ).map((checkbox) => checkbox.value);
-    // Department selection is now optional - no validation required
+    // department selection is now optional - no validation required
     // console.log removed for security
     // Add selected departments as preferred_departments (user's choice)
-    if (selectedDepartments.length > 0) {
+    if (selecteddepartments.length > 0) {
       // Send array of selected department codes
-      selectedDepartments.forEach((deptCode) => {
+      selecteddepartments.forEach((deptCode) => {
         const hiddenInput = document.createElement("input");
         hiddenInput.type = "hidden";
         hiddenInput.name = "preferred_departments";
@@ -900,13 +780,13 @@ function setupFormSubmission(form, fileHandler) {
       // Get selected files from file handler
       const selectedFiles = fileHandler.getFiles();
       // Submit the complaint using the correct parameters with fileHandler for progress tracking
-      const _result = await handleComplaintSubmit(
+      const _result = await handlecomplaintSubmit(
         form,
         selectedFiles,
         fileHandler
       );
       // Reset form on success
-      resetComplaintForm(form, () => fileHandler.clearAll());
+      resetcomplaintForm(form, () => fileHandler.clearAll());
       // Redirect to dashboard after delay
       setTimeout(() => {
         window.location.href = "/dashboard";
@@ -922,14 +802,14 @@ function setupFormSubmission(form, fileHandler) {
           submitBtn.textContent = submitBtn.dataset.originalText;
         }
       }
-      // Error message is already shown in handleComplaintSubmit
+      // Error message is already shown in handlecomplaintSubmit
     }
   });
 }
 /**
  * Setup department search functionality
  */
-function setupDepartmentSearch(allDepartments) {
+function setupdepartmentSearch(alldepartments) {
   const searchInput = document.getElementById("department-search");
   const searchResultsInfo = document.getElementById("search-results-info");
   const searchResultsCount = document.getElementById("search-results-count");
@@ -940,9 +820,9 @@ function setupDepartmentSearch(allDepartments) {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
       const query = e.target.value.toLowerCase().trim();
-      filterDepartments(
+      filterdepartments(
         query,
-        allDepartments,
+        alldepartments,
         searchResultsInfo,
         searchResultsCount
       );
@@ -952,9 +832,9 @@ function setupDepartmentSearch(allDepartments) {
   searchInput.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.target.value = "";
-      filterDepartments(
+      filterdepartments(
         "",
-        allDepartments,
+        alldepartments,
         searchResultsInfo,
         searchResultsCount
       );
@@ -964,9 +844,9 @@ function setupDepartmentSearch(allDepartments) {
 /**
  * Filter departments based on search query
  */
-function filterDepartments(
+function filterdepartments(
   query,
-  allDepartments,
+  alldepartments,
   searchResultsInfo,
   searchResultsCount
 ) {
@@ -1018,7 +898,7 @@ function filterDepartments(
 }
 // Initialize when DOM is ready
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeComplaintForm);
+  document.addEventListener("DOMContentLoaded", initializecomplaintForm);
 } else {
-  initializeComplaintForm();
+  initializecomplaintForm();
 }

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <title>Dictionary Manager - DRIMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..800;1,300..800&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        integrity="sha256-HtsXJanqjKTc8vVQjO4YMhiqFoXkfBsjBWcX91T1jr8=" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"
+        integrity="sha256-SERKgtTty1vsDxll+qzd4Y2cF9swY9BCq62i9wXJ9Uo=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/css/base/style.css" />
+    <link rel="stylesheet" href="/css/components/toast.css" />
+    <link rel="stylesheet" href="/css/components/sidebar.css" />
+    <link rel="stylesheet" href="/css/base/app.css" />
+    <link rel="stylesheet" href="/css/components/clock.css" />
+    <link rel="stylesheet" href="/css/components/header.css" />
+    <link rel="stylesheet" href="/css/layouts/viewportFix.css" />
+    <script type="module" src="/js/utils/theme.js"></script>
+    <link rel="stylesheet" href="/js/analytics/ml/analytics.css">
+    <link rel="stylesheet" href="/css/pages/dictionaryManager.css">
+</head>
+
+<body>
+    <div id="dashboard-clock" class="dashboard-clock" aria-live="polite"></div>
+    <div class="app-container analytics-mode">
+        <div class="header-container"></div>
+        <div id="sidebar" class="collapsible"></div>
+        <div id="app" class="collapsible">
+            <div class="dashboard-content p-6">
+                <div class="tactical-container">
+
+                    <!-- Page Header -->
+                    <div class="dict-page-header">
+                        <div>
+                            <h2 class="tactical-header dict-title">
+                                <i class="fas fa-book"></i> Dictionary Manager
+                            </h2>
+                            <p class="dict-subtitle">View, search, add, and remove keywords from the NLP dictionary used for complaint classification.</p>
+                        </div>
+                        <div class="dict-header-actions">
+                            <button id="refreshDictionaryBtn" class="dict-btn dict-btn-secondary">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                            <button id="exportDictionaryBtn" class="dict-btn dict-btn-primary">
+                                <i class="fas fa-download"></i> Export JSON
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Metric Cards Row -->
+                    <div class="summary-grid">
+                        <div class="glass-card summary-card rounded-xl">
+                            <div class="summary-card-content">
+                                <div class="icon-circle text-blue-500" style="background:rgba(59,130,246,0.15);">
+                                    <i class="fas fa-database"></i>
+                                </div>
+                                <div class="summary-card-metrics">
+                                    <p class="dict-metric-label">Total Keywords</p>
+                                    <h3 class="data-monospace" id="dictTotalKeywords">-</h3>
+                                    <p class="dict-metric-sub">Across all categories</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="glass-card summary-card rounded-xl">
+                            <div class="summary-card-content">
+                                <div class="icon-circle text-emerald-500" style="background:rgba(16,185,129,0.15);">
+                                    <i class="fas fa-globe"></i>
+                                </div>
+                                <div class="summary-card-metrics">
+                                    <p class="dict-metric-label">Languages</p>
+                                    <h3 class="data-monospace" id="dictLanguages">-</h3>
+                                    <p class="dict-metric-sub">Supported language</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="glass-card summary-card rounded-xl">
+                            <div class="summary-card-content">
+                                <div class="icon-circle text-teal-500" style="background:rgba(20,184,166,0.15);">
+                                    <i class="fas fa-folder-open"></i>
+                                </div>
+                                <div class="summary-card-metrics">
+                                    <p class="dict-metric-label">Categories</p>
+                                    <h3 class="data-monospace" id="dictCategories">-</h3>
+                                    <p class="dict-metric-sub">Keyword categories</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="glass-card summary-card rounded-xl">
+                            <div class="summary-card-content">
+                                <div class="icon-circle text-emerald-500" style="background:rgba(16,185,129,0.15);">
+                                    <i class="fas fa-calendar-check"></i>
+                                </div>
+                                <div class="summary-card-metrics">
+                                    <p class="dict-metric-label">Last Updated</p>
+                                    <h3 class="data-monospace" id="dictLastUpdated">-</h3>
+                                    <p class="dict-metric-sub">Dictionary updated</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main 2-Column Layout -->
+                    <div class="dict-main-grid">
+                        <!-- LEFT COLUMN -->
+                        <div class="dict-left-col">
+                            <!-- Search & Filter Panel -->
+                            <div class="glass-card rounded-xl dict-panel">
+                                <div class="chart-card-header">
+                                    <h3 class="chart-card-title"><i class="fas fa-search"></i> Search & Filter</h3>
+                                </div>
+                                <div class="dict-search-group">
+                                    <div class="dict-search-input-wrap">
+                                        <i class="fas fa-search"></i>
+                                        <input type="text" id="dict-search" placeholder="Search keywords...">
+                                    </div>
+                                    <label class="dict-filter-label">Category</label>
+                                    <div class="dict-select-wrap">
+                                        <select id="dict-category-filter">
+                                            <option value="all">All Categories</option>
+                                        </select>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Categories Overview Panel -->
+                            <div class="glass-card rounded-xl dict-panel">
+                                <div class="chart-card-header">
+                                    <h3 class="chart-card-title"><i class="fas fa-th-list"></i> Categories Overview</h3>
+                                    <button class="dict-view-all-btn" id="dictViewAllBtn">View All</button>
+                                </div>
+                                <div id="dict-categories-overview" class="dict-categories-list">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT COLUMN -->
+                        <div class="dict-right-col">
+                            <!-- Keywords by Category Chart -->
+                            <div class="glass-card rounded-xl dict-panel">
+                                <div class="chart-card-header">
+                                    <h3 class="chart-card-title"><i class="fas fa-chart-bar"></i> Keywords by Category</h3>
+                                    <div class="dict-select-wrap dict-select-sm">
+                                        <select id="dict-chart-view">
+                                            <option value="top">Top Categories</option>
+                                            <option value="all">All Categories</option>
+                                        </select>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                </div>
+                                <div class="dict-chart-container">
+                                    <canvas id="dictCategoryChart"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- NLP Modifiers Grid -->
+                            <div class="glass-card rounded-xl dict-panel">
+                                <div class="chart-card-header">
+                                    <h3 class="chart-card-title"><i class="fas fa-sliders-h"></i> NLP Modifiers</h3>
+                                </div>
+                                <div id="dict-modifiers-grid" class="dict-modifiers-grid">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Expandable Dictionary Content (accordions) -->
+                    <div id="dictionary-container" class="dict-accordion-section">
+                        <div class="loading-spinner">
+                            <div style="text-align: center;">
+                                <i class="fas fa-spinner fa-spin" style="display: block; margin-bottom: 12px; font-size: 1.5em;"></i>
+                                Loading dictionary...
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Scripts -->
+    <script type="module" src="/js/lib/supabaseBoot.js"></script>
+    <script type="module" src="/js/auth/authChecker.js"></script>
+    <script type="module" src="/js/auth/roleToggle.js"></script>
+    <script type="module" src="/js/components/toast.js"></script>
+    <script type="module" src="/js/components/header.js"></script>
+    <script type="module" src="/js/components/sidebar.js"></script>
+    <script type="module" src="/js/components/clock.js"></script>
+
+    <!-- Taxonomy and Dictionary Manager -->
+    <script src="/js/analytics/dashboard/shared/taxonomy.js"></script>
+    <script type="module" src="/js/analytics/ml/dictionaryManager.js"></script>
+</body>
+
+</html>

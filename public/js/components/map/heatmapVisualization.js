@@ -1,5 +1,5 @@
 /**
- * Heatmap Visualization Component for Complaint Locations
+ * Heatmap Visualization Component for complaint Locations
  * Integrates with Leaflet maps and DBSCAN clustering
  */
 
@@ -118,58 +118,35 @@ function isPointInPolygonCoords(lat, lng, coordinates) {
   return inside;
 }
 
-// Check if coordinates are within any barangay boundary
-function isWithinCityBoundary(lat, lng) {
-  if (typeof lat !== "number" || typeof lng !== "number") return false;
+// Check if coordinates are within any barangay boundary and return barangay name
+function getBarangayForPoint(lat, lng) {
+  if (typeof lat !== "number" || typeof lng !== "number") return null;
 
-  // Check if boundaries are loaded
   if (!window.cityBoundaries || !Array.isArray(window.cityBoundaries)) {
-    // Fallback to bounding box if boundaries not loaded
-    const minLat = 6.6;
-    const maxLat = 7.0;
-    const minLng = 125.0;
-    const maxLng = 125.7;
-    return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
+    return null;
   }
 
-  // Debug: Log boundary structure once
-  if (!window._boundaryDebugged && window.cityBoundaries.length > 0) {
-    window._boundaryDebugged = true;
-    const _firstBoundary = window.cityBoundaries[0];
-
-    // Test with a known point inside Digos City (approximate center)
-    const testLat = 6.85;
-    const testLng = 125.35;
-    let _testResult = false;
-    for (const boundary of window.cityBoundaries) {
-      if (
-        boundary &&
-        boundary.geojson &&
-        isPointInPolygon(testLat, testLng, boundary.geojson)
-      ) {
-        _testResult = true;
-        break;
-      }
-    }
-  }
-
-  // Check if point is within any barangay boundary
   for (const boundary of window.cityBoundaries) {
     if (boundary && boundary.geojson) {
       if (isPointInPolygon(lat, lng, boundary.geojson)) {
-        return true;
+        return boundary.name;
       }
     }
   }
 
-  return false;
+  return null;
+}
+
+// Check if coordinates are within any barangay boundary
+function isWithinCityBoundary(lat, lng) {
+  return Boolean(getBarangayForPoint(lat, lng));
 }
 
 class HeatmapVisualization {
   constructor(map) {
     this.map = map;
     this.complaintData = [];
-    this.allComplaintData = []; // Store all complaints for client-side filtering
+    this.allcomplaintData = []; // Store all complaints for client-side filtering
     this.roleScopedCache = null; // Cache filtered complaints per role for this tick
     this.markerMap = new Map(); // Map complaint ID to marker for quick lookup
     this.clusters = [];
@@ -179,7 +156,7 @@ class HeatmapVisualization {
     this.clusterLayer = null;
 
     // Initialize Clustering Engine (Adaptive DBSCAN)
-    if (typeof AdaptiveDBSCAN !== 'undefined') {
+    if (typeof AdaptiveDBSCAN !== "undefined") {
       this.dbscan = new AdaptiveDBSCAN();
       console.log("HeatmapVisualization: Using Adaptive DBSCAN++");
     } else {
@@ -187,9 +164,9 @@ class HeatmapVisualization {
       console.warn("HeatmapVisualization: Adaptive DBSCAN not found, falling back to standard DBSCAN");
     }
 
-    // Initialize Complaint Intelligence (NLP/Triage)
-    if (typeof ComplaintIntelligence !== 'undefined') {
-      this.intelligence = new ComplaintIntelligence();
+    // Initialize complaint Intelligence (NLP/Triage)
+    if (typeof complaintIntelligence !== "undefined") {
+      this.intelligence = new complaintIntelligence();
       console.log("HeatmapVisualization: Context-Aware Intelligence v3.6 active");
     }
 
@@ -197,7 +174,7 @@ class HeatmapVisualization {
     this.currentFilters = {};
     this.filterByBoundary = true; // Enable boundary filtering by default
     this.userRole = null; // Will be set when role is determined
-    this.userDepartment = null; // Will be set for LGU admins
+    this.userdepartment = null; // Will be set for LGU admins
     // Dynamic heatmap scaling configuration
     this.dynamicScaling = {
       enabled: true, // Enable dynamic scaling by default
@@ -255,7 +232,7 @@ class HeatmapVisualization {
    * @param {Object} complaint
    * @returns {string[]} department codes
    */
-  getComplaintDepartments(complaint) {
+  getcomplaintdepartments(complaint) {
     if (!complaint) return [];
 
     const rawEntries = [];
@@ -269,8 +246,8 @@ class HeatmapVisualization {
     };
 
     pushValue(complaint.departments);
-    pushValue(complaint.department_r);
-    pushValue(complaint.secondaryDepartments);
+    pushValue(complaint.departments);
+    pushValue(complaint.secondarydepartments);
     pushValue(complaint.department);
     pushValue(complaint.departmentCode || complaint.department_code);
 
@@ -301,24 +278,24 @@ class HeatmapVisualization {
    * Scope visible complaints based on role
    * @returns {Array} complaints limited to current user's access
    */
-  getRoleScopedComplaints() {
-    if (!Array.isArray(this.allComplaintData)) return [];
+  getRoleScopedcomplaints() {
+    if (!Array.isArray(this.allcomplaintData)) return [];
 
     const cacheHit =
       this.roleScopedCache &&
       this.roleScopedCache.role === this.userRole &&
-      this.roleScopedCache.department === this.userDepartment &&
-      this.roleScopedCache.sourceSize === this.allComplaintData.length;
+      this.roleScopedCache.department === this.userdepartment &&
+      this.roleScopedCache.sourceSize === this.allcomplaintData.length;
 
     if (cacheHit) {
       return this.roleScopedCache.data;
     }
 
-    const scoped = this.filterComplaintsByRole(this.allComplaintData);
+    const scoped = this.filtercomplaintsByRole(this.allcomplaintData);
     this.roleScopedCache = {
       role: this.userRole,
-      department: this.userDepartment,
-      sourceSize: this.allComplaintData.length,
+      department: this.userdepartment,
+      sourceSize: this.allcomplaintData.length,
       data: scoped,
     };
 
@@ -332,10 +309,10 @@ class HeatmapVisualization {
       const { getUserRole } = await import("../../auth/authChecker.js");
       this.userRole = await getUserRole();
 
-      // Get department for LGU admins
+      // Get department for LGU staff
       if (
         this.userRole &&
-        ["lgu", "lgu-admin", "lgu-hr"].includes(this.userRole)
+        this.userRole === "lgu"
       ) {
         try {
           const { supabase } = await import("../../config/config.js");
@@ -346,7 +323,7 @@ class HeatmapVisualization {
             session?.user?.raw_user_meta_data ||
             session?.user?.user_metadata ||
             {};
-          this.userDepartment = metadata.dpt || metadata.department;
+          this.userdepartment = metadata.dpt || metadata.department;
         } catch (error) {
           console.warn(
             "[HEATMAP] Failed to get department from metadata:",
@@ -357,7 +334,7 @@ class HeatmapVisualization {
 
       console.log("[HEATMAP] User role initialized:", {
         role: this.userRole,
-        department: this.userDepartment,
+        department: this.userdepartment,
       });
     } catch (error) {
       console.error("[HEATMAP] Failed to initialize user role:", error);
@@ -372,7 +349,7 @@ class HeatmapVisualization {
    * @param {Array} complaints - Array of complaints to filter
    * @returns {Array} Filtered complaints based on role
    */
-  filterComplaintsByRole(complaints) {
+  filtercomplaintsByRole(complaints) {
     if (!this.userRole) {
       // If role not initialized, return all (will be filtered later)
       return complaints;
@@ -384,22 +361,21 @@ class HeatmapVisualization {
       return complaints; // All complaints for heatmap, but markers won't be shown
     }
 
-    // Complaint coordinators: See all complaints
+    // complaint coordinators / super-admin: See all complaints
     if (
-      this.userRole === "complaint-coordinator" ||
       this.userRole === "super-admin"
     ) {
       return complaints; // All complaints
     }
 
-    // LGU Admins: See only complaints assigned to their department
-    if (this.userRole === "lgu-admin" && this.userDepartment) {
-      const targetDept = String(this.userDepartment || "")
+    // LGU Staff: See complaints assigned to their department (if dept is set)
+    if (this.userRole === "lgu" && this.userdepartment) {
+      const targetDept = String(this.userdepartment || "")
         .toUpperCase()
         .trim();
       return complaints.filter((complaint) => {
-        const complaintDepartments = this.getComplaintDepartments(complaint);
-        return complaintDepartments.includes(targetDept);
+        const complaintdepartments = this.getcomplaintdepartments(complaint);
+        return complaintdepartments.includes(targetDept);
       });
     }
 
@@ -411,7 +387,7 @@ class HeatmapVisualization {
    * Load complaint data from API
    * @param {Object} filters - Filter options
    */
-  async loadComplaintData(filters = {}) {
+  async loadcomplaintData(filters = {}) {
     try {
       // console.log removed for security
       this.currentFilters = filters;
@@ -423,23 +399,22 @@ class HeatmapVisualization {
       // - LGU Admins: Add department filter if not present (see only their office)
       const sanitizedFilters = { ...filters };
       if (
-        this.userRole === "complaint-coordinator" ||
         this.userRole === "super-admin"
       ) {
         delete sanitizedFilters.department;
         console.log(
-          "[HEATMAP] Coordinator/Super-admin detected - removing department filter from API request"
+          "[HEATMAP] Super-admin detected - removing department filter from API request"
         );
       } else if (
-        this.userRole === "lgu-admin" &&
-        this.userDepartment &&
+        this.userRole === "lgu" &&
+        this.userdepartment &&
         !sanitizedFilters.department
       ) {
-        // Automatically add department filter for LGU admins if not already present
-        sanitizedFilters.department = this.userDepartment;
+        // Automatically add department filter for LGU staff if not already present
+        sanitizedFilters.department = this.userdepartment;
         console.log(
           "[HEATMAP] LGU Admin detected - adding department filter to API request:",
-          this.userDepartment
+          this.userdepartment
         );
       }
 
@@ -449,6 +424,8 @@ class HeatmapVisualization {
         "includeResolved",
         sanitizedFilters.includeResolved !== false ? "true" : "false"
       );
+      // Ask backend for lightweight response to reduce payload
+      queryParams.append("lightweight", "true");
       Object.entries(sanitizedFilters).forEach(([key, value]) => {
         // Skip includeResolved as we already set it above
         if (key === "includeResolved") return;
@@ -473,9 +450,11 @@ class HeatmapVisualization {
       const apiClientModule = await import("../../config/apiClient.js");
       const apiClient = apiClientModule.default;
       // console.log removed for security
+      console.log("[HEATMAP] API Request:", `/api/complaints/locations?${queryParams}`);
       const result = await apiClient.get(
         `/api/complaints/locations?${queryParams}`
       );
+      console.log("[HEATMAP] API Response:", result);
       // Backend service already returns data with lat/lng fields correctly formatted
       const raw = Array.isArray(result.data) ? result.data : [];
       // console.log removed for security
@@ -502,7 +481,7 @@ class HeatmapVisualization {
           id: raw[0].id,
           title: raw[0].title,
           departments: raw[0].departments,
-          department_r: raw[0].department_r,
+          departments: raw[0].departments,
           departments_type: typeof raw[0].departments,
           departments_isArray: Array.isArray(raw[0].departments),
           allKeys: Object.keys(raw[0]),
@@ -540,12 +519,17 @@ class HeatmapVisualization {
             status: item.status || item.workflow_status || "new",
             workflow_status: item.workflow_status || item.status || "new",
             confirmation_status: item.confirmation_status || "pending",
-            title: item.title || "Complaint",
+            title: item.title || "complaint",
             type: item.type || item.category || "General",
             category: item.category || item.type || "General",
             location: item.location || item.location_text || "",
             submittedAt: item.submittedAt || item.submitted_at || new Date().toISOString(),
           };
+
+          // Cache boundary check to avoid recalculating on filter changes
+          const barangayName = getBarangayForPoint(lat, lng);
+          itemWrapper.barangay = item.barangay || barangayName;
+          itemWrapper._inBoundary = Boolean(barangayName);
 
           // Apply Context-Aware Intelligence Analysis
           if (this.intelligence) {
@@ -571,7 +555,7 @@ class HeatmapVisualization {
 
       if (this.filterByBoundary) {
         withinBoundaryData = sanitizedData.filter((item) => {
-          const withinBoundary = isWithinCityBoundary(item.lat, item.lng);
+          const withinBoundary = item._inBoundary;
           if (!withinBoundary) {
             if (filteredByBoundary.length < 3) {
               console.log(
@@ -597,7 +581,7 @@ class HeatmapVisualization {
         }
       }
 
-      this.allComplaintData = withinBoundaryData;
+      this.allcomplaintData = withinBoundaryData;
 
       // Invalidate role cache when new data arrives
       this.roleScopedCache = null;
@@ -614,27 +598,27 @@ class HeatmapVisualization {
       console.log(`[HEATMAP] Data loading summary:`);
       console.log(`  - Raw data from API: ${raw.length} complaints`);
       console.log(
-        `  - After coordinate validation: ${this.allComplaintData.length} complaints`
+        `  - After coordinate validation: ${this.allcomplaintData.length} complaints`
       );
       if (this.filterByBoundary && this._filteredCount > 0) {
         console.log(
           `  - Filtered out by boundary: ${this._filteredCount} complaint(s)`
         );
         console.log(
-          `  - Remaining within boundaries: ${this.allComplaintData.length} complaint(s)`
+          `  - Remaining within boundaries: ${this.allcomplaintData.length} complaint(s)`
         );
       }
       console.log(
         `  - After client-side filters: ${this.complaintData.length} complaint(s) visible`
       );
       console.log(
-        `  - User role: ${this.userRole}, Department: ${this.userDepartment || "N/A"
+        `  - User role: ${this.userRole}, department: ${this.userdepartment || "N/A"
         }`
       );
 
       // Debug: Check if we're missing complaints
-      if (raw.length > this.allComplaintData.length) {
-        const missing = raw.length - this.allComplaintData.length;
+      if (raw.length > this.allcomplaintData.length) {
+        const missing = raw.length - this.allcomplaintData.length;
         console.warn(
           `[HEATMAP] ⚠️ WARNING: ${missing} complaint(s) were filtered out (invalid coordinates or outside boundaries)`
         );
@@ -914,7 +898,7 @@ class HeatmapVisualization {
   }
   /**
    * Calculate intensity value for heatmap based on complaint properties
-   * @param {Object} complaint - Complaint data
+   * @param {Object} complaint - complaint data
    * @returns {number} Intensity value (0-1)
    */
   getIntensityValue(complaint) {
@@ -949,7 +933,7 @@ class HeatmapVisualization {
    * @param {Object} filters - Filter criteria
    */
   applyClientSideFilters(filters = {}) {
-    const baseData = this.getRoleScopedComplaints();
+    const baseData = this.getRoleScopedcomplaints();
 
     if (!baseData || baseData.length === 0) {
       this.complaintData = [];
@@ -957,8 +941,8 @@ class HeatmapVisualization {
     }
 
     const effectiveFilters = { ...filters };
-    if (this.userRole === "lgu-admin" && this.userDepartment) {
-      effectiveFilters.department = this.userDepartment;
+    if (this.userRole === "lgu" && this.userdepartment) {
+      effectiveFilters.department = this.userdepartment;
     }
 
     // Debug: Check sample complaints for department data
@@ -1046,24 +1030,23 @@ class HeatmapVisualization {
         const departmentArray = Array.isArray(effectiveFilters.department)
           ? effectiveFilters.department
           : [effectiveFilters.department];
-        // Get complaint's assigned departments - backend returns as 'departments' field (from department_r)
-        // Fallback to department_r in case backend format changes
-        const complaintDepartments = this.getComplaintDepartments(complaint);
+        // Normalize complaint departments so both arrays and comma-separated values work
+        const complaintDepts = this.getcomplaintdepartments(complaint);
 
         // Debug logging
 
         // If complaint has no departments assigned, exclude it from results
-        if (complaintDepartments.length === 0) {
+        if (complaintDepts.length === 0) {
           return false;
         }
 
         // Check if any selected department code matches any department in departments array
         // Use case-insensitive comparison to handle any case variations
-        const matchesDepartment = departmentArray.some((filterDept) => {
+        const matchesdepartment = departmentArray.some((filterDept) => {
           const filterDeptUpper = String(filterDept || "")
             .toUpperCase()
             .trim();
-          return complaintDepartments.some((complaintDept) => {
+          return complaintDepts.some((complaintDept) => {
             const complaintDeptUpper = String(complaintDept || "")
               .toUpperCase()
               .trim();
@@ -1071,7 +1054,7 @@ class HeatmapVisualization {
           });
         });
 
-        if (!matchesDepartment) {
+        if (!matchesdepartment) {
           return false;
         }
       }
@@ -1112,6 +1095,15 @@ class HeatmapVisualization {
         }
       }
 
+      // Filter by barangay
+      if (effectiveFilters.barangay && effectiveFilters.barangay !== "") {
+        const complaintBarangay = (complaint.barangay || "").toLowerCase();
+        const filterBarangay = effectiveFilters.barangay.toLowerCase();
+        if (complaintBarangay !== filterBarangay) {
+          return false;
+        }
+      }
+
       return true;
     });
 
@@ -1130,7 +1122,7 @@ class HeatmapVisualization {
       return this.markerLayer;
     }
 
-    if (!this.allComplaintData || this.allComplaintData.length === 0) {
+    if (!this.allcomplaintData || this.allcomplaintData.length === 0) {
       console.warn("[HEATMAP] No complaint data to create markers from");
       this.markerLayer = null;
       return null;
@@ -1138,7 +1130,7 @@ class HeatmapVisualization {
 
     // Initialize user role if not already done
     if (!this.userRole) {
-      // Synchronous fallback - role should be initialized in loadComplaintData
+      // Synchronous fallback - role should be initialized in loadcomplaintData
       console.warn(
         "[HEATMAP] User role not initialized, defaulting to citizen"
       );
@@ -1146,7 +1138,7 @@ class HeatmapVisualization {
     }
 
     // Filter complaints for markers based on role
-    let complaintsForMarkers = this.getRoleScopedComplaints();
+    let complaintsForMarkers = this.getRoleScopedcomplaints();
 
     // Citizens: No markers (only heatmap)
     // if (this.userRole === "citizen") {
@@ -1158,27 +1150,33 @@ class HeatmapVisualization {
     //   return this.markerLayer;
     // }
 
-    // Complaint coordinators and super-admin: All markers
+    // Use filtered complaint data (this.complaintData) — NOT allcomplaintData.
+    // this.complaintData is set by applyClientSideFilters() and respects all active filters.
+    // Role-based scoping is applied on top of filters.
+
+    // Super-admin: All filtered markers
     if (
-      this.userRole === "complaint-coordinator" ||
       this.userRole === "super-admin"
     ) {
-      complaintsForMarkers = this.allComplaintData;
-      console.log("[HEATMAP] Coordinator/Super-admin: Showing all markers");
+      complaintsForMarkers = this.complaintData;
+      console.log(`[HEATMAP] Super-admin: Showing ${complaintsForMarkers.length} filtered markers`);
     }
-    // LGU Admins: Only complaints assigned to their office/department
-    else if (this.userRole === "lgu-admin" && this.userDepartment) {
-      complaintsForMarkers = this.getRoleScopedComplaints();
+    // LGU Staff: Only filtered complaints assigned to their office/department
+    else if (this.userRole === "lgu" && this.userdepartment) {
+      // Start from filtered data, then scope to department
+      const filteredData = this.complaintData || [];
+      complaintsForMarkers = filteredData.filter(c => {
+        const dept = (c.department || c.assignedDepartment || "").toUpperCase();
+        return dept === this.userdepartment.toUpperCase() || dept === "";
+      });
       console.log(
-        `[HEATMAP] LGU Admin (${this.userDepartment}): Showing ${complaintsForMarkers.length} assigned complaints out of ${this.allComplaintData.length} total`
+        `[HEATMAP] LGU Staff (${this.userdepartment}): Showing ${complaintsForMarkers.length} filtered+scoped markers`
       );
     }
-    // Default: No markers
+    // All other roles: Show all filtered markers
     else {
-      console.log(`[HEATMAP] Role ${this.userRole}: Markers disabled`);
-      this.markerLayer = L.layerGroup(); // Empty layer group
-      this.markerMap.clear();
-      return this.markerLayer;
+      complaintsForMarkers = this.complaintData;
+      console.log(`[HEATMAP] Role ${this.userRole}: Showing ${complaintsForMarkers.length} filtered markers`);
     }
 
     // Create marker layer and store all markers
@@ -1188,7 +1186,7 @@ class HeatmapVisualization {
 
     complaintsForMarkers.forEach((complaint, index) => {
       try {
-        const marker = this.createComplaintMarker(complaint, index);
+        const marker = this.createcomplaintMarker(complaint, index);
         // Add marker to layer group (but NOT to map)
         this.markerLayer.addLayer(marker);
         // Store marker reference by complaint ID for quick lookup
@@ -1249,7 +1247,7 @@ class HeatmapVisualization {
     // Apply filters to determine which complaints should be visible
     this.applyClientSideFilters(this.currentFilters || {});
 
-    const visibleComplaintIds = new Set(this.complaintData.map((c) => c.id));
+    const visiblecomplaintIds = new Set(this.complaintData.map((c) => c.id));
     let visibleCount = 0;
     let hiddenCount = 0;
 
@@ -1258,20 +1256,15 @@ class HeatmapVisualization {
       this.markerLayer.addTo(this.map);
     }
 
-    // Update visibility of each marker
+    // Update visibility of each marker using CSS opacity instead of DOM removal for performance
     this.markerLayer.eachLayer((marker) => {
-      const complaintId =
-        marker._complaintId ||
-        marker.options?.complaintId ||
-        (this.markerMap &&
-          Array.from(this.markerMap.entries()).find(
-            ([_id, m]) => m === marker
-          )?.[0]);
+      // ID should always exist via marker._complaintId or marker.options.complaintId
+      const complaintId = marker._complaintId || marker.options?.complaintId;
 
       let shouldBeVisible = false;
 
       if (complaintId) {
-        shouldBeVisible = visibleComplaintIds.has(complaintId);
+        shouldBeVisible = visiblecomplaintIds.has(complaintId);
       } else {
         // Fallback: check by coordinates (less reliable but works if ID is missing)
         const latLng = marker.getLatLng();
@@ -1282,19 +1275,25 @@ class HeatmapVisualization {
         );
       }
 
-      // Show or hide marker based on filter match
-      // Note: Markers are part of markerLayer, so we manage visibility by adding/removing from layer
+      // Show or hide marker using opacity toggle
       if (shouldBeVisible) {
-        // Show marker - ensure it's in the layer
-        if (!this.markerLayer.hasLayer(marker)) {
-          this.markerLayer.addLayer(marker);
+        if (marker.setOpacity) marker.setOpacity(1);
+        // Restore pointer events for hover/click
+        if (marker._icon) marker._icon.style.pointerEvents = "auto";
+        if (marker.setZIndexOffset) {
+          marker.setZIndexOffset(marker.options.originalZIndex || marker.options.zIndexOffset || 0);
         }
         visibleCount++;
       } else {
-        // Hide marker by removing from layer
-        if (this.markerLayer.hasLayer(marker)) {
-          this.markerLayer.removeLayer(marker);
+        if (marker.setOpacity) marker.setOpacity(0);
+        // Disable hover/clicks when hidden
+        if (marker._icon) marker._icon.style.pointerEvents = "none";
+
+        // Save original z-index before hiding
+        if (marker.options.originalZIndex === undefined) {
+          marker.options.originalZIndex = marker.options.zIndexOffset || 0;
         }
+        if (marker.setZIndexOffset) marker.setZIndexOffset(-9999);
         hiddenCount++;
       }
     });
@@ -1322,7 +1321,7 @@ class HeatmapVisualization {
     // console.log removed for security
     this.complaintData.forEach((complaint, _index) => {
       // console.log removed for security
-      const circle = this.createComplaintCircle(complaint);
+      const circle = this.createcomplaintCircle(complaint);
       this.circleLayer.addLayer(circle);
     });
     // console.log removed for security
@@ -1330,12 +1329,12 @@ class HeatmapVisualization {
   }
   /**
    * Create individual complaint marker
-   * @param {Object} complaint - Complaint data
+   * @param {Object} complaint - complaint data
    * @param {number} index - Index of the complaint (for unique styling)
    * @returns {L.Marker} Leaflet marker
    */
-  createComplaintMarker(complaint, index = 0) {
-    const icon = this.getComplaintIcon(complaint, index);
+  createcomplaintMarker(complaint, index = 0) {
+    const icon = this.getcomplaintIcon(complaint, index);
     const marker = L.marker([complaint.lat, complaint.lng], {
       icon,
       // Add z-index offset to prevent stacking
@@ -1346,7 +1345,7 @@ class HeatmapVisualization {
     // Also store directly on marker for quick access
     marker._complaintId = complaint.id;
     // Create popup content
-    const popupContent = this.createComplaintPopup(complaint);
+    const popupContent = this.createcomplaintPopup(complaint);
     marker.bindPopup(popupContent, {
       maxWidth: 250,
       className: "complaint-popup",
@@ -1355,10 +1354,10 @@ class HeatmapVisualization {
   }
   /**
    * Create clickable circle for complaint
-   * @param {Object} complaint - Complaint data
+   * @param {Object} complaint - complaint data
    * @returns {L.Circle} Leaflet circle
    */
-  createComplaintCircle(complaint) {
+  createcomplaintCircle(complaint) {
     const priorityColors = {
       low: "#28a745",
       medium: "#ffc107",
@@ -1408,7 +1407,7 @@ class HeatmapVisualization {
     // Create detailed popup content (async)
     circle.bindPopup(
       async () => {
-        return await this.createDetailedComplaintPopup(complaint);
+        return await this.createDetailedcomplaintPopup(complaint);
       },
       {
         maxWidth: 280,
@@ -1427,11 +1426,11 @@ class HeatmapVisualization {
   }
   /**
    * Get appropriate icon for complaint
-   * @param {Object} complaint - Complaint data
+   * @param {Object} complaint - complaint data
    * @param {number} index - Index of the complaint (for unique styling)
    * @returns {L.Icon} Leaflet icon
    */
-  getComplaintIcon(complaint, index = 0) {
+  getcomplaintIcon(complaint, index = 0) {
     // Color based on complaint status
     // Handles both 'status' and 'workflow_status' fields
     const statusColors = {
@@ -1511,10 +1510,10 @@ class HeatmapVisualization {
   }
   /**
    * Create popup content for complaint
-   * @param {Object} complaint - Complaint data
+   * @param {Object} complaint - complaint data
    * @returns {string} HTML content
    */
-  createComplaintPopup(complaint) {
+  createcomplaintPopup(complaint) {
     const submittedDate = new Date(complaint.submittedAt).toLocaleDateString();
     const priorityClass = complaint.priority.replace(" ", "-").toLowerCase();
     const assignedOffices =
@@ -1525,18 +1524,18 @@ class HeatmapVisualization {
     return `
       <div class="complaint-popup-content" style="padding: 8px; font-size: 12px; line-height: 1.3;">
         <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold;">${complaint.title
-      }</h4>
+}</h4>
         <div class="complaint-details" style="margin: 0; padding: 0;">
           <p style="margin: 2px 0; font-size: 11px;"><strong>Type:</strong> ${complaint.type
-      }</p>
+}</p>
           <p style="margin: 2px 0; font-size: 11px;"><strong>Status:</strong> <span class="status-${complaint.status.replace(
-        " ",
-        "-"
-      )}">${complaint.status}</span></p>
+    " ",
+    "-"
+  )}">${complaint.status}</span></p>
           <p style="margin: 2px 0; font-size: 11px;"><strong>Priority:</strong> <span class="priority-${priorityClass}">${complaint.priority
-      }</span></p>
+}</span></p>
           <p style="margin: 2px 0; font-size: 11px;"><strong>Location:</strong> ${complaint.location
-      }</p>
+}</p>
           <p style="margin: 2px 0; font-size: 11px;"><strong>Submitted:</strong> ${submittedDate}</p>
           <p style="margin: 2px 0; font-size: 11px;"><strong>Assigned Offices:</strong> ${assignedOffices}</p>
         </div>
@@ -1546,10 +1545,10 @@ class HeatmapVisualization {
 
   /**
    * Create detailed popup content for complaint circles
-   * @param {Object} complaint - Complaint data
+   * @param {Object} complaint - complaint data
    * @returns {string} HTML content
    */
-  async createDetailedComplaintPopup(complaint) {
+  async createDetailedcomplaintPopup(complaint) {
     const submittedDate = new Date(complaint.submittedAt).toLocaleDateString();
     const _submittedTime = new Date(complaint.submittedAt).toLocaleTimeString();
     const priorityClass = complaint.priority.replace(" ", "-").toLowerCase();
@@ -1566,14 +1565,14 @@ class HeatmapVisualization {
     );
 
     // Check if user has access to this complaint
-    const hasAccess = await this.checkComplaintAccess(complaint);
+    const hasAccess = await this.checkcomplaintAccess(complaint);
 
     if (!hasAccess) {
       return `
         <div class="complaint-detail-popup" style="padding: 8px; font-size: 12px; line-height: 1.3; max-width: 280px;">
           <div class="popup-header" style="margin: 0 0 6px 0; padding: 0;">
             <h3 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${complaint.title
-        }</h3>
+}</h3>
             <div class="complaint-badges" style="display: flex; gap: 4px; margin: 0;">
               <span class="badge priority-${priorityClass}" style="font-size: 9px; padding: 2px 4px;">${complaint.priority.toUpperCase()}</span>
               <span class="badge status-${statusClass}" style="font-size: 9px; padding: 2px 4px;">${complaint.status.toUpperCase()}</span>
@@ -1588,7 +1587,7 @@ class HeatmapVisualization {
               <div class="info-row" style="margin: 2px 0; font-size: 11px; display: flex; justify-content: space-between;">
                 <span class="label" style="font-weight: bold;">Location:</span>
                 <span class="value" style="text-align: right; max-width: 60%;">${complaint.location
-        }</span>
+}</span>
               </div>
               <div class="info-row" style="margin: 2px 0; font-size: 11px; display: flex; justify-content: space-between;">
                 <span class="label" style="font-weight: bold;">Assigned Offices:</span>
@@ -1604,24 +1603,24 @@ class HeatmapVisualization {
               ${complaint.intelligence ? `
               <div class="info-row" style="margin: 6px 0 2px 0; padding-top: 4px; border-top: 1px dashed #eee;">
                 <span class="label" style="font-weight: bold; color: #666;">AI Confidence:</span>
-                <span class="value" style="font-weight: bold; color: ${complaint.intelligence.isCritical ? '#dc3545' : '#28a745'}">
+                <span class="value" style="font-weight: bold; color: ${complaint.intelligence.isCritical ? "#dc3545" : "#28a745"}">
                   ${Math.round(complaint.intelligence.urgencyScore)}/100 
-                  ${complaint.intelligence.veracityLabel === 'GEO-VERIFIED' ? '<i class="fas fa-check-circle" title="Location Verified" style="color:#007bff; margin-left:4px;"></i>' : ''}
+                  ${complaint.intelligence.veracityLabel === "GEO-VERIFIED" ? '<i class="fas fa-check-circle" title="Location Verified" style="color:#007bff; margin-left:4px;"></i>' : ""}
                 </span>
               </div>
               ${complaint.intelligence.aiReclassified ? `
               <div class="info-row" style="margin: 2px 0; font-size: 10px; color: #e67e22;">
-                <i class="fas fa-magic"></i> Auto-categorized from <em>${complaint.original_category || 'Others'}</em>
-              </div>` : ''}
+                <i class="fas fa-magic"></i> Auto-categorized from <em>${complaint.original_category || "Others"}</em>
+              </div>` : ""}
               ${complaint.intelligence.metaphorDetected ? `
               <div class="info-row" style="margin: 2px 0; font-size: 10px; color: #17a2b8;">
                 <i class="fas fa-language"></i> Metaphor detected (lowered urgency)
-              </div>` : ''}
+              </div>` : ""}
               ${complaint.intelligence.geoBoost > 0 ? `
               <div class="info-row" style="margin: 2px 0; font-size: 10px; color: #28a745;">
                 <i class="fas fa-map-marker-alt"></i> +${complaint.intelligence.geoBoost} pts: ${complaint.intelligence.geoReason}
-              </div>` : ''}
-              ` : ''}
+              </div>` : ""}
+              ` : ""}
 
             </div>
             </div>
@@ -1641,9 +1640,9 @@ class HeatmapVisualization {
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
               <h3 style="margin: 0; font-size: 13px; font-weight: bold; flex: 1;">${complaint.title}</h3>
               ${complaint.intelligence && complaint.intelligence.isCritical ?
-        '<span class="badge" style="background: #dc3545; color: white; font-size: 10px; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">CRITICAL</span>' : ''}
+    '<span class="badge" style="background: #dc3545; color: white; font-size: 10px; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">CRITICAL</span>' : ""}
               ${complaint.intelligence && complaint.intelligence.isContextSuppressed ?
-        '<span class="badge" style="background: #6c757d; color: white; font-size: 10px; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">SUPPRESSED</span>' : ''}
+    '<span class="badge" style="background: #6c757d; color: white; font-size: 10px; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">SUPPRESSED</span>' : ""}
             </div>
           <div class="complaint-badges" style="display: flex; gap: 4px; margin: 0;">
             <span class="badge priority-${priorityClass}" style="font-size: 9px; padding: 2px 4px;">${complaint.priority.toUpperCase()}</span>
@@ -1659,7 +1658,7 @@ class HeatmapVisualization {
             <div class="info-row" style="margin: 2px 0; font-size: 11px; display: flex; justify-content: space-between;">
               <span class="label" style="font-weight: bold;">Location:</span>
               <span class="value" style="text-align: right; max-width: 60%;">${complaint.location
-      }</span>
+}</span>
             </div>
             <div class="info-row" style="margin: 2px 0; font-size: 11px; display: flex; justify-content: space-between;">
               <span class="label" style="font-weight: bold;">Assigned Offices:</span>
@@ -1672,17 +1671,17 @@ class HeatmapVisualization {
             <div class="info-row" style="margin: 2px 0; font-size: 11px; display: flex; justify-content: space-between;">
               <span class="label" style="font-weight: bold;">Days Open:</span>
               <span class="value">${daysSinceSubmission} day${daysSinceSubmission !== 1 ? "s" : ""
-      }</span>
+}</span>
             </div>
           </div>
           <div class="popup-actions" style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #ddd; display: flex; gap: 4px;">
-            <button class="btn-details" onclick="viewComplaintDetails('${complaint.id
-      }')" style="font-size: 10px; padding: 4px 8px; flex: 1;">
+            <button class="btn-details" onclick="viewcomplaintDetails('${complaint.id
+}')" style="font-size: 10px; padding: 4px 8px; flex: 1;">
               📋 Details
             </button>
-            <button class="btn-location" onclick="centerOnComplaint(${complaint.lat
-      }, ${complaint.lng
-      })" style="font-size: 10px; padding: 4px 8px; flex: 1;">
+            <button class="btn-location" onclick="centerOncomplaint(${complaint.lat
+}, ${complaint.lng
+})" style="font-size: 10px; padding: 4px 8px; flex: 1;">
               📍 Center
             </button>
           </div>
@@ -1693,10 +1692,10 @@ class HeatmapVisualization {
 
   /**
    * Check if user has access to view full details of a complaint
-   * @param {Object} complaint - Complaint data
+   * @param {Object} complaint - complaint data
    * @returns {boolean} True if user has access
    */
-  async checkComplaintAccess(complaint) {
+  async checkcomplaintAccess(complaint) {
     try {
       // Import getUserRole function
       const { getUserRole } = await import("../../auth/authChecker.js");
@@ -1712,15 +1711,12 @@ class HeatmapVisualization {
         return true;
       }
 
-      // Complaint coordinator has access to everything
-      if (userRole === "complaint-coordinator") {
-        // console.log removed for security
-        return true;
-      }
+      // LGU staff with coordinator role has access to everything
+      // (complaint-coordinator is normalized to 'lgu' by auth middleware)
 
       // With simplified roles, department is stored separately in metadata
-      let userDepartment = null;
-      if (userRole && ["lgu", "lgu-admin", "lgu-hr"].includes(userRole)) {
+      let userdepartment = null;
+      if (userRole && userRole === "lgu") {
         // Get department from user metadata
         try {
           const { supabase } = await import("../../config/config.js");
@@ -1731,7 +1727,7 @@ class HeatmapVisualization {
             session?.user?.raw_user_meta_data ||
             session?.user?.user_metadata ||
             {};
-          userDepartment = metadata.dpt || metadata.department;
+          userdepartment = metadata.dpt || metadata.department;
         } catch (error) {
           console.warn("Failed to get department from metadata:", error);
         }
@@ -1739,40 +1735,33 @@ class HeatmapVisualization {
 
       // console.log removed for security
 
-      if (!userDepartment) {
+      if (!userdepartment) {
         // console.log removed for security
         return false;
       }
 
       // Check if complaint is assigned to user's department
-      const complaintDepartment = complaint.department?.toUpperCase();
-      const complaintDepartments = complaint.departments || [];
-      const secondaryDepartments = complaint.secondaryDepartments || [];
+      const complaintdepartment = complaint.department?.toUpperCase();
+      const complaintdepartments = this.getcomplaintdepartments(complaint);
 
       // Check primary department
-      if (complaintDepartment === userDepartment) {
+      if (complaintdepartment === userdepartment) {
         // console.log removed for security
         return true;
       }
 
       // Check if user's department is in the departments array
-      if (complaintDepartments.includes(userDepartment)) {
-        // console.log removed for security
-        return true;
-      }
-
-      // Check if user's department is in secondary departments
-      if (secondaryDepartments.includes(userDepartment)) {
+      if (complaintdepartments.includes(userdepartment)) {
         // console.log removed for security
         return true;
       }
 
       // Check if it's a joint/forced complaint (multiple departments)
-      if (complaintDepartment && complaintDepartment.includes(",")) {
-        const assignedDepartments = complaintDepartment
+      if (complaintdepartment && complaintdepartment.includes(",")) {
+        const assigneddepartments = complaintdepartment
           .split(",")
           .map((dept) => dept.trim().toUpperCase());
-        if (assignedDepartments.includes(userDepartment)) {
+        if (assigneddepartments.includes(userdepartment)) {
           // console.log removed for security
           return true;
         }
@@ -1825,8 +1814,11 @@ class HeatmapVisualization {
           const lng = parseFloat(complaint.lng);
           return {
             ...complaint, // Spread properties so AdaptiveDBSCAN can access category, subcategory, etc.
-            lat: lat,
-            lng: lng,
+            lat,
+            lng,
+            latitude: lat,   // AdaptiveDBSCAN also uses latitude/longitude
+            longitude: lng,  // AdaptiveDBSCAN also uses latitude/longitude
+            timestamp: complaint.submittedAt || complaint.submitted_at || new Date().toISOString(),
             data: complaint
           };
         });
@@ -1842,17 +1834,9 @@ class HeatmapVisualization {
       // Handle different return types (Adaptive returns object, Standard returns array)
       if (Array.isArray(clusteringResult)) {
         this.clusters = clusteringResult;
-        this.chainAnalysis = [];
       } else {
         this.clusters = clusteringResult.clusters || [];
         // Note: clusteringResult.noise is also available if needed
-
-        // Analyze chains if method exists (AdaptiveDBSCAN feature)
-        if (typeof this.dbscan.analyzeCausalChains === 'function') {
-          this.chainAnalysis = this.dbscan.analyzeCausalChains(clusteringResult);
-        } else {
-          this.chainAnalysis = [];
-        }
       }
 
       // Update Command Center Insights if available
@@ -1879,49 +1863,169 @@ class HeatmapVisualization {
     this.clusterLayer = L.layerGroup();
 
     this.clusters.forEach((cluster, index) => {
-      const clusterPoints = cluster.map((i) => this.complaintData[i]);
+      // Handle both index-based (standard DBSCAN) and object-based (AdaptiveDBSCAN) cluster results
+      let clusterPoints;
+      if (cluster.length > 0 && typeof cluster[0] === "number") {
+        // Standard DBSCAN: cluster is an array of indices
+        clusterPoints = cluster.map((i) => this.complaintData[i]).filter(Boolean);
+      } else {
+        // AdaptiveDBSCAN: cluster is an array of point objects
+        clusterPoints = cluster;
+      }
+
+      if (!clusterPoints || clusterPoints.length === 0) return;
+
       const clusterCenter = this.calculateClusterCenter(clusterPoints);
       const clusterRadius = this.calculateClusterRadius(
         clusterPoints,
         clusterCenter
       );
 
-      // Create cluster circle
-      const clusterCircle = L.circle(clusterCenter, {
-        radius: clusterRadius * 1000, // Convert km to meters
-        color:
-          this.clusterConfig.clusterColors[
-          index % this.clusterConfig.clusterColors.length
-          ],
-        weight: 2,
-        opacity: 0.8,
-        fillOpacity: 0.2,
+      const clusterColor = this.clusterConfig.clusterColors[index % this.clusterConfig.clusterColors.length];
+
+      // 1. Create individual point markers for each complaint in the cluster
+      clusterPoints.forEach(point => {
+        // Use standard lat/lng
+        const lat = point.lat || point.latitude;
+        const lng = point.lng || point.longitude;
+
+        if (lat === undefined || lng === undefined) return;
+
+        // Spotlight style marker (white border, colored inner, glowing effect)
+        const size = 20;
+        const html = `
+          <div class="spotlight-marker-inner" style="
+              width: ${size}px;
+              height: ${size}px;
+              background: ${clusterColor};
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border: 3px solid white;
+              box-shadow: 0 0 10px ${clusterColor};
+          ">
+            <div style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.8;"></div>
+          </div>
+        `;
+
+        const pointMarker = L.marker([lat, lng], {
+          icon: L.divIcon({
+            className: "spotlight-marker",
+            html,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2]
+          }),
+          zIndexOffset: 800
+        });
+
+        // Bind the standard complaint popup to individual points
+        const pointPopupContent = this.createcomplaintPopup(point);
+        pointMarker.bindPopup(pointPopupContent, {
+          maxWidth: 250,
+          className: "complaint-popup"
+        });
+
+        this.clusterLayer.addLayer(pointMarker);
       });
 
-      // Create cluster marker
-      const clusterMarker = L.marker(clusterCenter, {
+      // 1.5. Draw distance-limited connecting lines (MST-style)
+      if (clusterPoints.length > 1) {
+        const MAX_LINE_DISTANCE = 0.05; // ~50 meters in km
+        const drawnConnections = new Set();
+
+        for (let i = 0; i < clusterPoints.length; i++) {
+          const from = clusterPoints[i];
+          const fromLat = from.lat || from.latitude;
+          const fromLng = from.lng || from.longitude;
+          if (!fromLat || !fromLng) continue;
+
+          let nearestDist = Infinity;
+          let nearestIdx = -1;
+
+          for (let j = 0; j < clusterPoints.length; j++) {
+            if (i === j) continue;
+            const to = clusterPoints[j];
+            const toLat = to.lat || to.latitude;
+            const toLng = to.lng || to.longitude;
+            if (!toLat || !toLng) continue;
+
+            // calculateDistance returns km
+            const dist = this.dbscan.calculateDistance({lat: fromLat, lng: fromLng}, {lat: toLat, lng: toLng});
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestIdx = j;
+            }
+          }
+
+          if (nearestIdx !== -1 && nearestDist <= MAX_LINE_DISTANCE) {
+            const connectionKey = [Math.min(i, nearestIdx), Math.max(i, nearestIdx)].join("-");
+            if (!drawnConnections.has(connectionKey)) {
+              drawnConnections.add(connectionKey);
+              const to = clusterPoints[nearestIdx];
+              const toLat = to.lat || to.latitude;
+              const toLng = to.lng || to.longitude;
+
+              const line = L.polyline(
+                [[fromLat, fromLng], [toLat, toLng]],
+                {
+                  color: clusterColor,
+                  weight: 1,        // Subtle
+                  opacity: 0.3,     // Low opacity
+                  dashArray: "5, 5" // Dashed
+                }
+              );
+              this.clusterLayer.addLayer(line);
+            }
+          }
+        }
+      }
+
+      // 1.6. CONVEX HULL POLYGON - Wraps cluster points to show "Area of Effect"
+      if (clusterPoints.length >= 3) {
+        const pointsForHull = clusterPoints.map(p => [p.lat || p.latitude, p.lng || p.longitude]).filter(p => p[0] && p[1]);
+        const hullPoints = this.computeConvexHull(pointsForHull);
+
+        if (hullPoints && hullPoints.length >= 3) {
+          const hullPolygon = L.polygon(hullPoints, {
+            color: clusterColor,
+            weight: 2,
+            opacity: 0.7,
+            fillColor: clusterColor,
+            fillOpacity: 0.12,
+            dashArray: "4, 4",
+            className: "cluster-convex-hull"
+          });
+          this.clusterLayer.addLayer(hullPolygon);
+        }
+      }
+
+      // 2. Create the central HOT SPOT label
+      const clusterMarker = L.marker([clusterCenter.lat, clusterCenter.lng], {
         icon: L.divIcon({
-          html: `<div style="
-            background-color: ${this.clusterConfig.clusterColors[
-            index % this.clusterConfig.clusterColors.length
-            ]
-            };
-            color: white;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 16px;
-            border: 3px solid white;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-          ">${cluster.length}</div>`,
-          className: "cluster-marker",
-          iconSize: [40, 40],
-          iconAnchor: [20, 20],
+          className: "cluster-label multi-report-label",
+          html: `
+            <div style="
+                background: ${clusterColor};
+                color: white;
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-size: 11px;
+                font-weight: 600;
+                white-space: nowrap;
+                cursor: pointer;
+                text-align: center;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                border: 1px solid rgba(255,255,255,0.2);
+            ">
+                <div style="margin-bottom: 2px;"><i class="fas fa-map-marker-alt"></i> HOT SPOT</div>
+                <div style="font-size: 10px; opacity: 0.9; font-weight: normal;">${clusterPoints.length} reports</div>
+            </div>
+          `,
+          iconSize: [80, 45],
+          iconAnchor: [40, 22]
         }),
+        zIndexOffset: 1000
       });
 
       // Create cluster popup
@@ -1931,7 +2035,6 @@ class HeatmapVisualization {
         className: "cluster-popup",
       });
 
-      this.clusterLayer.addLayer(clusterCircle);
       this.clusterLayer.addLayer(clusterMarker);
     });
 
@@ -1958,8 +2061,16 @@ class HeatmapVisualization {
    */
   calculateClusterRadius(points, center) {
     let maxDistance = 0;
+    const R = 6371; // Earth's radius in km
+    const toRad = (deg) => deg * (Math.PI / 180);
     points.forEach((point) => {
-      const distance = this.dbscan.calculateDistance(center, point);
+      const dLat = toRad((point.lat || point.latitude) - center.lat);
+      const dLng = toRad((point.lng || point.longitude) - center.lng);
+      const a = (Math.sin(dLat / 2) * Math.sin(dLat / 2)) +
+                (Math.cos(toRad(center.lat)) * Math.cos(toRad(point.lat || point.latitude)) *
+                 Math.sin(dLng / 2) * Math.sin(dLng / 2));
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
       maxDistance = Math.max(maxDistance, distance);
     });
     return maxDistance;
@@ -1984,47 +2095,27 @@ class HeatmapVisualization {
         (priorityCounts[complaint.priority] || 0) + 1;
     });
 
-    // Get Chain Insight
-    const chainInfo = this.chainAnalysis ? this.chainAnalysis[clusterIndex] : null;
-    let chainHtml = '';
-
-    if (chainInfo && (chainInfo.chainType === 'DIRECT_CAUSAL' || chainInfo.chainType === 'TRANSITIVE_CHAIN')) {
-      const badgeColor = '#d63384'; // Pink/Purple for Causal
-
-      chainHtml = `
-          <div class="cluster-insight" style="margin-bottom: 10px; padding: 8px; background: rgba(214, 51, 132, 0.1); border-left: 3px solid ${badgeColor}; border-radius: 4px;">
-            <div style="font-size: 10px; font-weight: bold; color: ${badgeColor}; text-transform: uppercase; margin-bottom: 2px;">
-                <i class="fas fa-project-diagram"></i> Causal Chain Detected
-            </div>
-            <div style="font-size: 12px; font-weight: 700; color: #333;">
-                ${chainInfo.chainDescription}
-            </div>
-          </div>
-        `;
-    }
-
     return `
       <div class="cluster-popup-content">
         <h4>Cluster ${clusterIndex + 1} (${clusterPoints.length} complaints)</h4>
-        ${chainHtml}
         <div class="cluster-stats">
           <h5>Status Distribution:</h5>
           <ul>
             ${Object.entries(statusCounts)
-        .map(([status, count]) => `<li>${status}: ${count}</li>`)
-        .join("")}
+    .map(([status, count]) => `<li>${status}: ${count}</li>`)
+    .join("")}
           </ul>
           <h5>Type Distribution:</h5>
           <ul>
             ${Object.entries(typeCounts)
-        .map(([type, count]) => `<li>${type}: ${count}</li>`)
-        .join("")}
+    .map(([type, count]) => `<li>${type}: ${count}</li>`)
+    .join("")}
           </ul>
           <h5>Priority Distribution:</h5>
           <ul>
             ${Object.entries(priorityCounts)
-        .map(([priority, count]) => `<li>${priority}: ${count}</li>`)
-        .join("")}
+    .map(([priority, count]) => `<li>${priority}: ${count}</li>`)
+    .join("")}
           </ul>
         </div>
       </div>
@@ -2190,7 +2281,7 @@ class HeatmapVisualization {
 
       if (complaint) {
         // Create new icon with updated size and color based on current zoom and complaint status
-        const newIcon = this.getComplaintIcon(complaint, index);
+        const newIcon = this.getcomplaintIcon(complaint, index);
         marker.setIcon(newIcon);
       }
     });
@@ -2217,7 +2308,7 @@ class HeatmapVisualization {
 
     if (marker) {
       const index = markers.indexOf(marker);
-      const newIcon = this.getComplaintIcon(complaint, index);
+      const newIcon = this.getcomplaintIcon(complaint, index);
       marker.setIcon(newIcon);
     }
   }
@@ -2257,8 +2348,10 @@ class HeatmapVisualization {
    * Show clusters on map
    */
   showClusters() {
+    console.log(`[HEATMAP] showClusters: clusterLayer=${  Boolean(this.clusterLayer)  }, map=${  Boolean(this.map)  }, layers=${  this.clusterLayer ? this.clusterLayer.getLayers().length : 0}`);
     if (this.clusterLayer) {
       this.clusterLayer.addTo(this.map);
+      console.log("[HEATMAP] clusterLayer added to map, current layers on map:", this.clusterLayer.getLayers().length);
     }
   }
 
@@ -2346,6 +2439,68 @@ class HeatmapVisualization {
         this.showClusters();
       }
     }
+  }
+
+  /**
+   * Compute the convex hull of a set of points using Graham Scan algorithm.
+   * Used to draw "Area of Effect" polygons around DBSCAN clusters.
+   *
+   * @param {Array} points - Array of [lat, lng] pairs
+   * @returns {Array} Array of [lat, lng] pairs forming the convex hull (clockwise)
+   */
+  computeConvexHull(points) {
+    if (!points || points.length < 3) return points;
+
+    // Find the point with lowest y-coordinate (and leftmost if tie)
+    let pivot = points[0];
+    let pivotIdx = 0;
+
+    for (let i = 1; i < points.length; i++) {
+      if (points[i][0] < pivot[0] ||
+              (points[i][0] === pivot[0] && points[i][1] < pivot[1])) {
+        pivot = points[i];
+        pivotIdx = i;
+      }
+    }
+
+    // Swap pivot to first position
+    [points[0], points[pivotIdx]] = [points[pivotIdx], points[0]];
+    pivot = points[0];
+
+    // Sort points by polar angle with respect to pivot
+    const sorted = points.slice(1).sort((a, b) => {
+      const angleA = Math.atan2(a[0] - pivot[0], a[1] - pivot[1]);
+      const angleB = Math.atan2(b[0] - pivot[0], b[1] - pivot[1]);
+
+      if (angleA !== angleB) return angleA - angleB;
+
+      // If same angle, keep the farther point
+      const distA = Math.pow(a[0] - pivot[0], 2) + Math.pow(a[1] - pivot[1], 2);
+      const distB = Math.pow(b[0] - pivot[0], 2) + Math.pow(b[1] - pivot[1], 2);
+      return distA - distB;
+    });
+
+    // Build hull using stack
+    const hull = [pivot];
+
+    for (const point of sorted) {
+      // Remove points that make clockwise turn
+      while (hull.length >= 2 &&
+              this.crossProduct(hull[hull.length - 2], hull[hull.length - 1], point) <= 0) {
+        hull.pop();
+      }
+      hull.push(point);
+    }
+
+    return hull;
+  }
+
+  /**
+   * Calculate cross product of vectors OA and OB
+   * Positive = counterclockwise, Negative = clockwise, Zero = collinear
+   */
+  crossProduct(O, A, B) {
+    return (A[1] - O[1]) * (B[0] - O[0]) - (A[0] - O[0]) * (B[1] - O[1]);
   }
 }
 

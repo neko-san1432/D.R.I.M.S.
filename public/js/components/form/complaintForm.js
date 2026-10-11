@@ -1,71 +1,23 @@
 /**
- * Complaint Form Controller
+ * complaint Form Controller
  * Main form initialization and event handling
  */
-import { handleComplaintSubmit, resetComplaintForm } from "./formSubmission.js";
+import { handlecomplaintSubmit, resetcomplaintForm } from "./formSubmission.js";
 import { setupRealtimeValidation } from "../../utils/validation.js";
-import { createComplaintFileHandler, setupDragAndDrop } from "../../utils/fileHandler.js";
+import { createcomplaintFileHandler, setupDragAndDrop } from "../../utils/fileHandler.js";
 import showMessage from "../toast.js";
 import apiClient from "../../config/apiClient.js";
 import { getActiveRole, isInCitizenMode, canSwitchToCitizen } from "../../auth/roleToggle.js";
 import { getUserRole } from "../../auth/authChecker.js";
 
-// Complaint type and subtype mapping
-const COMPLAINT_SUBTYPES = {
-  "infrastructure": [
-    "Roads & Bridges",
-    "Street Lighting",
-    "Water Supply",
-    "Drainage System",
-    "Public Buildings",
-    "Other"
-  ],
-  "public-safety": [
-    "Crime & Security",
-    "Emergency Services",
-    "Fire Safety",
-    "Traffic Safety",
-    "Other"
-  ],
-  "environmental": [
-    "Waste Management",
-    "Air Quality",
-    "Water Pollution",
-    "Noise Pollution",
-    "Green Spaces",
-    "Other"
-  ],
-  "health": [
-    "Sanitation",
-    "Public Health",
-    "Medical Services",
-    "Food Safety",
-    "Other"
-  ],
-  "traffic": [
-    "Road Conditions",
-    "Traffic Flow",
-    "Parking Issues",
-    "Public Transportation",
-    "Other"
-  ],
-  "noise": [
-    "Construction Noise",
-    "Vehicle Noise",
-    "Commercial Noise",
-    "Residential Noise",
-    "Other"
-  ],
-  "other": [
-    "General Complaint",
-    "Other"
-  ]
-};
+// complaint type and subtype mapping
+// complaint subtypes removed
+
 /**
  * Initialize complaint form
  */
 
-export async function initializeComplaintForm() {
+export async function initializecomplaintForm() {
   const form = document.getElementById("complaintForm");
   if (!form) {
     console.error("[COMPLAINT FORM] Form element not found");
@@ -100,7 +52,7 @@ export async function initializeComplaintForm() {
   const elements = {
     form,
     typeSelect: form.querySelector("#complaintType"),
-    subtypeSelect: form.querySelector("#complaintSubtype"),
+    // subtypeSelect removed
     fileDropZone: form.querySelector("#fileDropZone"),
     fileInput: form.querySelector("#evidenceFiles"),
     filePreview: form.querySelector("#filePreview")
@@ -114,7 +66,7 @@ export async function initializeComplaintForm() {
     return;
   }
   // Initialize file handler with upload state callback
-  const fileHandler = createComplaintFileHandler({
+  const fileHandler = createcomplaintFileHandler({
     previewContainer: elements.filePreview,
     onFilesChange: (_files) => {
       // console.log removed for security
@@ -132,11 +84,11 @@ export async function initializeComplaintForm() {
     }
   });
   // Setup form functionality
-  setupSubtypeSelection(elements.typeSelect, elements.subtypeSelect);
+  // setupSubtypeSelection removed
   setupFileHandling(elements.fileDropZone, elements.fileInput, fileHandler);
   setupFormValidation(elements.form);
   setupFormSubmission(elements.form, fileHandler);
-  loadDepartments();
+  loaddepartments();
   // Prevent any auto-focus behavior (browser default or otherwise)
   setTimeout(() => {
     // Remove focus from any form field
@@ -150,29 +102,11 @@ export async function initializeComplaintForm() {
 /**
  * Setup complaint type and subtype selection
  */
-function setupSubtypeSelection(typeSelect, subtypeSelect) {
-  if (!typeSelect || !subtypeSelect) return;
-  typeSelect.addEventListener("change", (e) => {
-    populateSubtypes(e.target.value, subtypeSelect);
-  });
-}
+
 /**
  * Populate complaint subtypes based on selected type
  */
-function populateSubtypes(selectedType, subtypeSelect) {
-  if (!subtypeSelect) return;
-  // Clear existing options
-  subtypeSelect.innerHTML = '<option value="">Select complaint subtype</option>';
-  if (!selectedType || !COMPLAINT_SUBTYPES[selectedType]) return;
-  // Add new options
-  COMPLAINT_SUBTYPES[selectedType].forEach(subtype => {
-    const option = document.createElement("option");
-    option.value = subtype.toLowerCase().replace(/\s+/g, "-");
-    option.textContent = subtype;
-    subtypeSelect.appendChild(option);
-  });
-  // console.log removed for security
-}
+
 /**
  * Setup file handling functionality
  */
@@ -236,17 +170,17 @@ function setupFormSubmission(form, fileHandler) {
       // Get current files
       const selectedFiles = fileHandler.getFiles();
       // Submit the complaint with fileHandler for progress tracking
-      const _result = await handleComplaintSubmit(form, selectedFiles, fileHandler);
+      const _result = await handlecomplaintSubmit(form, selectedFiles, fileHandler);
       // console.log removed for security
       // Reset form on success
-      resetComplaintForm(form, () => fileHandler.clearAll());
+      resetcomplaintForm(form, () => fileHandler.clearAll());
       // Redirect to dashboard after delay
       setTimeout(() => {
         window.location.href = "/dashboard";
       }, 2000);
     } catch (error) {
       console.error("[COMPLAINT FORM] Submission failed:", error);
-      // Error is already handled in handleComplaintSubmit
+      // Error is already handled in handlecomplaintSubmit
     }
   });
   // console.log removed for security
@@ -254,12 +188,12 @@ function setupFormSubmission(form, fileHandler) {
 /**
  * Load and render departments dynamically
  */
-async function loadDepartments() {
+async function loaddepartments() {
   const container = document.getElementById("departmentCheckboxes");
   if (!container) return;
   try {
     // console.log removed for security
-    const response = await apiClient.getActiveDepartments();
+    const response = await apiClient.getActivedepartments();
     if (response.success && response.data) {
       const departments = response.data;
       // console.log removed for security
@@ -282,7 +216,7 @@ async function loadDepartments() {
     container.innerHTML = `
       <div class="error-placeholder">
         <p>Failed to load departments. You can still submit your complaint.</p>
-        <button type="button" onclick="window.retryLoadDepartments()" class="btn btn-sm btn-secondary">
+        <button type="button" onclick="window.retryLoaddepartments()" class="btn btn-sm btn-secondary">
           Retry
         </button>
       </div>
@@ -290,9 +224,9 @@ async function loadDepartments() {
   }
 }
 // Make retry function globally available
-window.retryLoadDepartments = loadDepartments;
+window.retryLoaddepartments = loaddepartments;
 // Auto-initialize when DOM is loaded
-document.addEventListener("DOMContentLoaded", initializeComplaintForm);
+document.addEventListener("DOMContentLoaded", initializecomplaintForm);
 // Export for manual initialization
 
-export { COMPLAINT_SUBTYPES };
+export { };

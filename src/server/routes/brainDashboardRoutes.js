@@ -2,15 +2,19 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const ComplaintService = require("../services/ComplaintService");
 const { authenticateUser, requireRole } = require("../middleware/auth");
-const fs = require("fs");
 const path = require("path");
+// const fs = require("fs"); // Unused if mock loading is removed
 
 const router = express.Router();
 
-function mapBodyRowToBrainComplaint(row) {
+// Simple 30-second TTL cache to avoid redundant DB hits from concurrent polling
+let _ttlCache = { data: null, filters: null, expiresAt: 0 };
+const TTL_MS = 30 * 1000;
+
+function mapBodyRowToBraincomplaint(row) {
   const description =
-    row.descriptive_su ||
     row.description ||
+    row.descriptive_su ||
     row.title ||
     row.location_text ||
     "";
@@ -27,7 +31,7 @@ function mapBodyRowToBrainComplaint(row) {
     status: row.workflow_status || row.status || null,
     title: row.title || null,
     location_text: row.location_text || null,
-    department_r: row.department_r || [],
+    departments: row.departments || row.department_r || [],
     priority: row.priority || null,
   };
 }
@@ -37,19 +41,10 @@ router.get(
   authenticateUser,
   requireRole([
     "super-admin",
-    "complaint-coordinator",
-    "lgu-admin",
-    "lgu-engineering",
-    "lgu-wst",
-    "lgu-treasury",
-    "lgu-health",
-    "lgu-pnp",
-    "lgu-bfp",
-    "lgu-mayor",
+    "lgu",
   ]),
   async (req, res) => {
     try {
-      const complaintService = new ComplaintService();
       const includeResolved =
         req.query.includeResolved !== undefined
           ? String(req.query.includeResolved).toLowerCase() === "true"
@@ -66,41 +61,42 @@ router.get(
         includeResolved,
       };
 
-      const result = await complaintService.getComplaintLocations(filters);
-      const rows = Array.isArray(result)
-        ? result
-        : Array.isArray(result?.data)
-          ? result.data
-          : [];
-      let complaints = rows.map(mapBodyRowToBrainComplaint);
+      console.log(`[BRAIN-API] Fetching complaints. Filters:`, {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        category: filters.category,
+        department: filters.department,
+        includeResolved
+      });
 
-      if (
-        complaints.length === 0 &&
-        String(process.env.NODE_ENV || "").toLowerCase() === "development"
-      ) {
-        try {
-          const mockPath = path.join(
-            __dirname,
-            "..",
-            "..",
-            "..",
-            "public",
-            "data",
-            "complaints",
-            "mock_complaints.json"
-          );
-          const raw = fs.readFileSync(mockPath, "utf8");
-          const parsed = JSON.parse(raw);
-          const base = Array.isArray(parsed) ? parsed : parsed?.complaints;
-          const fallbackRows = Array.isArray(base) ? base : [];
-          complaints = fallbackRows.map(mapBodyRowToBrainComplaint);
-        } catch {}
+      // Check TTL cache — reuse if same filters and not expired
+      const filterKey = JSON.stringify(filters);
+      let complaints;
+
+      if (_ttlCache.data && _ttlCache.filters === filterKey && Date.now() < _ttlCache.expiresAt) {
+        complaints = _ttlCache.data;
+        console.log(`[BRAIN-API] TTL cache hit: ${complaints.length} complaints`);
+      } else {
+        // Direct query via ComplaintService
+        const complaintService = new ComplaintService();
+        const result = await complaintService.getcomplaintLocations(filters);
+        complaints = Array.isArray(result)
+          ? result
+          : Array.isArray(result?.data)
+            ? result.data
+            : [];
+
+        // Update TTL cache
+        _ttlCache = { data: complaints, filters: filterKey, expiresAt: Date.now() + TTL_MS };
+        console.log(`[BRAIN-API] DB query: ${complaints.length} complaints (cached for ${TTL_MS / 1000}s)`);
       }
+
+      const mappedComplaints = complaints.map(mapBodyRowToBraincomplaint);
 
       res.json({
         success: true,
-        count: complaints.length,
-        complaints,
+        count: mappedComplaints.length,
+        complaints: mappedComplaints,
       });
     } catch (error) {
       res.status(500).json({
@@ -117,15 +113,7 @@ router.get(
   authenticateUser,
   requireRole([
     "super-admin",
-    "complaint-coordinator",
-    "lgu-admin",
-    "lgu-engineering",
-    "lgu-wst",
-    "lgu-treasury",
-    "lgu-health",
-    "lgu-pnp",
-    "lgu-bfp",
-    "lgu-mayor",
+    "lgu",
   ]),
   async (req, res) => {
     res.writeHead(200, {
@@ -156,7 +144,7 @@ router.get(
         const { data, error } = await supabase
           .from("complaints")
           .select(
-            "id, title, descriptive_su, workflow_status, priority, latitude, longitude, location_text, submitted_at, department_r, category, subcategory"
+            "id, title, description, workflow_status, priority, latitude, longitude, location_text, submitted_at, departments, category, subcategory"
           )
           .gt("submitted_at", lastSeen)
           .not("latitude", "is", null)
@@ -172,7 +160,7 @@ router.get(
         if (!Array.isArray(data) || data.length === 0) return;
 
         for (const row of data) {
-          const complaint = mapBodyRowToBrainComplaint(row);
+          const complaint = mapBodyRowToBraincomplaint(row);
           send({ type: "NEW_COMPLAINT", complaint });
         }
 

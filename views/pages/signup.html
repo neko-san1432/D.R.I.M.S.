@@ -4,18 +4,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign Up - CitizenLink</title>
-  <link rel="icon" type="image/png" href="/favicon.png" />
-  <link rel="shortcut icon" href="/favicon.ico" />
+  <title>Sign Up - DRIMS</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css" />
-  <link rel="stylesheet" href="./css/toast.css" />
-  <link rel="stylesheet" href="./css/header-redesign.css" />
-  <link rel="stylesheet" href="./css/pages/signup.css" />
+  <link rel="stylesheet" href="/css/base/style.css" />
+  <link rel="stylesheet" href="/css/components/toast.css" />
+  <link rel="stylesheet" href="/css/components/header.css" />
+  <link rel="stylesheet" href="/css/pages/signup.css?v=3" />
 </head>
 
 <body class="auth-page">
@@ -24,19 +23,20 @@
   <div class="grid-overlay"></div>
 
   <!-- Navigation -->
-  <nav class="navbar glass-nav">
+  <nav class="navbar glass-nav" style="margin: 0 !important; top: 0 !important; width: 100% !important;">
     <div class="nav-container">
-      <div class="logo">
+      <a href="/" class="logo" style="text-decoration: none; display: flex; align-items: center; color: inherit;">
         <div class="logo-icon">
-          <img src="/assets/images/CitizenLink-logo-no-text.png" alt="Logo"
+          <img src="/assets/images/dRIMSIconRemovebgPreview.png" alt="Logo"
             style="height: 48px; width: auto; object-fit: contain;">
         </div>
-        <span class="logo-text" style="color: #f8fafc; text-decoration: none;">CitizenLink</span>
-      </div>
+        <span class="brand-text" style="font-size: 1.5rem; margin-left: 8px; font-weight: 700; color: white;">DRIMS</span>
+      </a>
       <div class="nav-links">
-        <a href="/">Home</a>
-        <a href="/#features">Features</a>
-        <a href="/login" class="nav-link-secondary" style="color: var(--text-light);">Login</a>
+        <a href="/" style="color: var(--text-dim);">Home</a>
+        <a href="/#features" style="color: var(--text-dim);">Features</a>
+        <a href="/login" class="nav-link-secondary" style="color: var(--text-light); font-weight: 600;">Login</a>
+        <a href="/signup" class="btn-primary-sm">Get Started</a>
       </div>
     </div>
   </nav>
@@ -48,7 +48,7 @@
       <div class="auth-header">
         <h1 class="auth-title">Create your account</h1>
         <p class="auth-subtitle">
-          Join CitizenLink to start making a difference in your community
+          Join DRIMS to start making a difference in your community
         </p>
       </div>
 
@@ -127,16 +127,16 @@
               </div>
 
               <!-- Email Signup Flow (Hidden by Default) -->
-              <div id="signup-email-flow" hidden class="animate-slide-in-up">
-                <div class="form-header-actions mb-4">
-                  <button type="button" id="signup-method-back" class="btn btn-ghost btn-sm">
+              <div id="signup-email-flow" hidden>
+                <div class="form-header-actions mb-2">
+                  <button type="button" id="signup-method-back" class="signup-method-back">
                     ← Back to methods
                   </button>
                 </div>
                 <!-- Progress Bar -->
                 <progress class="signup-progress-bar w-full" id="signup-progress-bar" value="0" max="100"></progress>
                 <div class="signup-progress-label" id="signup-progress-label"
-                  style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
+                  style="margin-top: 0.25rem; margin-bottom: 0.75rem;">
                   Step 1 of 4 · 0% complete
                 </div>
 
@@ -149,8 +149,16 @@
                     <div class="form-group form-half">
                       <label for="firstName" class="form-label form-label-required">First Name</label>
                       <div class="input-wrapper">
-                        <input class="input form-control" type="text" id="firstName" name="firstName"
+                        <input class="input form-control has-icon" type="text" id="firstName" name="firstName"
                           placeholder="Enter your first name" required autocomplete="given-name" />
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" />
+                            <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
@@ -158,8 +166,16 @@
                     <div class="form-group form-half">
                       <label for="lastName" class="form-label">Last Name</label>
                       <div class="input-wrapper">
-                        <input class="input" type="text" id="lastName" name="lastName"
+                        <input class="input has-icon" type="text" id="lastName" name="lastName"
                           placeholder="Enter your last name" required autocomplete="family-name" />
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" />
+                            <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
@@ -167,8 +183,16 @@
                     <div class="form-group form-full">
                       <label for="addressLine1" class="form-label">Address Line 1 *</label>
                       <div class="input-wrapper">
-                        <input class="input" type="text" id="addressLine1" name="addressLine1"
+                        <input class="input has-icon" type="text" id="addressLine1" name="addressLine1"
                           placeholder="House no., street" autocomplete="address-line1" required />
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="currentColor"
+                              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
@@ -176,25 +200,32 @@
                     <div class="form-group form-full">
                       <label for="addressLine2" class="form-label">Address Line 2 (Optional)</label>
                       <div class="input-wrapper">
-                        <input class="input" type="text" id="addressLine2" name="addressLine2"
+                        <input class="input has-icon" type="text" id="addressLine2" name="addressLine2"
                           placeholder="Unit, building, subdivision" autocomplete="address-line2" />
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="currentColor"
+                              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
-                    <!-- Postal Code and Barangay -->
-                    <div class="form-group form-half">
-                      <label for="postalCode" class="form-label">Postal Code</label>
-                      <div class="input-wrapper">
-                        <input class="input" type="text" id="postalCode" name="postalCode"
-                          placeholder="4 digits (e.g., 1234)" maxlength="4" pattern="[0-9]{4}"
-                          autocomplete="postal-code" />
-                      </div>
-                    </div>
-
+                    <!-- Barangay -->
                     <div class="form-group form-half">
                       <label for="barangay" class="form-label">Barangay</label>
                       <div class="input-wrapper">
-                        <select id="barangay" name="barangay" class="input" required></select>
+                        <select id="barangay" name="barangay" class="input has-icon" required></select>
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="currentColor"
+                              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
@@ -202,11 +233,19 @@
                     <div class="form-group form-half">
                       <label for="gender" class="form-label">Gender</label>
                       <div class="input-wrapper">
-                        <select id="gender" name="gender" class="input">
+                        <select id="gender" name="gender" class="input has-icon">
                           <option value="" selected>Select gender</option>
                           <option value="he">He</option>
                           <option value="she">She</option>
                         </select>
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" />
+                            <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                              stroke-linejoin="round" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -216,17 +255,25 @@
                     <h3 class="step-title">Account Credentials</h3>
 
                     <!-- Email Field -->
-                    <div class="form-group form-full">
+                    <div class="form-group form-half">
                       <label for="email" class="form-label form-label-required">Email Address</label>
                       <div class="input-wrapper">
-                        <input class="input form-control" type="email" id="email" name="email"
+                        <input class="input form-control has-icon" type="email" id="email" name="email"
                           placeholder="Enter your email" required autocomplete="email" />
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
                     <!-- Phone Field -->
-                    <div class="form-group form-full">
-                      <label for="mobile" class="form-label">Phone Number</label>
+                    <div class="form-group form-half">
+                      <label for="mobile" class="form-label form-label-required">Phone Number</label>
                       <div class="phone-input-wrapper">
                         <div class="phone-prefix">+63</div>
                         <input class="input phone-input" type="tel" id="mobile" name="mobile" placeholder="9123456789"
@@ -235,11 +282,20 @@
                     </div>
 
                     <!-- Password Field -->
-                    <div class="form-group form-full">
+                    <div class="form-group form-half">
                       <label for="regPassword" class="form-label form-label-required">Password</label>
                       <div class="input-wrapper">
-                        <input class="input form-control" type="password" id="regPassword" name="password"
+                        <input class="input form-control has-icon" type="password" id="regPassword" name="password"
                           placeholder="Create a strong password" required autocomplete="new-password" />
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor"
+                              stroke-width="2" />
+                            <circle cx="12" cy="16" r="1" fill="currentColor" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                        </div>
                         <button type="button" class="password-toggle" aria-label="Toggle password visibility">
                           <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -256,11 +312,21 @@
                     </div>
 
                     <!-- Confirm Password Field -->
-                    <div class="form-group form-full">
+                    <div class="form-group form-half">
                       <label for="reRegPassword" class="form-label form-label-required">Confirm Password</label>
                       <div class="input-wrapper">
-                        <input class="input form-control" type="password" id="reRegPassword" name="confirmPassword"
-                          placeholder="Confirm your password" required autocomplete="new-password" />
+                        <input class="input form-control has-icon" type="password" id="reRegPassword"
+                          name="confirmPassword" placeholder="Confirm your password" required
+                          autocomplete="new-password" />
+                        <div class="input-icon">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor"
+                              stroke-width="2" />
+                            <circle cx="12" cy="16" r="1" fill="currentColor" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                        </div>
                         <button type="button" class="password-toggle" aria-label="Toggle password visibility">
                           <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -295,7 +361,7 @@
                           <div class="dz-text">
                             <strong>Click to upload</strong> or drag and drop
                             <div class="dz-hint">
-                              Accepted: JPG, PNG, PDF (front side is enough)
+                              Accepted: JPG, PNG (front side is enough)
                             </div>
                           </div>
                           <input id="id-file-input" name="id-file" type="file" accept="image/*,application/pdf"
@@ -367,7 +433,7 @@
                       <div class="form-group">
                         <label for="secondary-file-input" class="form-label">Upload Document</label>
                         <div class="id-mode id-mode-upload" style="min-height: 120px">
-                          <label for="secondary-file-input" class="id-dropzone" style="background: var(--gray-50)">
+                          <label for="secondary-file-input" class="id-dropzone">
                             <div class="dz-text">
                               <strong>Click to upload document</strong>
                               <div class="dz-hint">
@@ -378,7 +444,7 @@
                           </label>
                         </div>
                         <div id="secondary-file-preview"
-                          class="hidden mt-2 text-sm text-gray-600 flex items-center justify-between p-2 bg-gray-100 rounded">
+                          class="hidden mt-2 text-sm flex items-center justify-between p-3 rounded-lg" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-light);">
                           <span id="secondary-filename"></span>
                           <button type="button" id="secondary-remove-btn" class="text-red-500 hover:text-red-700">
                             &times;
@@ -407,9 +473,9 @@
                         </button>
                         <div class="id-verify-status" id="id-verify-status" aria-live="polite"></div>
                       </div>
-                      <details class="id-verify-review" id="id-review" disabled>
+                      <details class="id-verify-review" id="id-review" hidden>
                         <summary class="review-summary-disabled">
-                          Finished
+                          Verification Results
                         </summary>
                         <div class="review-grid" id="id-review-grid"></div>
                       </details>
@@ -426,6 +492,10 @@
                       Please review your information and complete the security
                       check.
                     </p>
+
+                    <div id="signup-review-summary" class="review-summary-container form-full mb-4">
+                      <!-- Populated by JS -->
+                    </div>
 
                     <div id="register-captcha" class="captcha-container form-full"></div>
 
@@ -450,11 +520,20 @@
                   <button type="button" id="signup-prev-btn" class="btn btn-secondary" hidden>
                     Back
                   </button>
-                  <button type="button" id="signup-next-btn" class="btn btn-primary ml-auto">
-                    Next
+                  <button type="button" id="signup-next-btn" class="btn btn-primary ml-auto btn-premium">
+                    <span>Next</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                      <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
                   </button>
-                  <button type="submit" id="signup-submit-btn" class="btn btn-primary ml-auto" hidden>
+                  <button type="submit" id="signup-submit-btn" class="btn btn-primary ml-auto btn-premium" hidden>
                     <span>Create Account</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="8.5" cy="7" r="4"></circle>
+                      <polyline points="17 11 19 13 23 9"></polyline>
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -477,13 +556,13 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Scripts -->
-  <script type="module" src="/js/lib/supabase-boot.js"></script>
-  <script type="module" src="./js/components/toast.js"></script>
+  <script type="module" src="/js/lib/supabaseBoot.js"></script>
+  <script type="module" src="/js/components/toast.js"></script>
   <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
-  <script type="module" src="./js/auth/auth.js"></script>
-  <script type="module" src="/js/pages/signup-id-verify.js"></script>
-  <script type="module" src="/js/auth/signup-progressive.js"></script>
-  <script type="module" src="./js/auth/authChecker.js"></script>
+  <script type="module" src="/js/auth/auth.js"></script>
+  <script type="module" src="/js/pages/signupIdVerify.js"></script>
+  <script type="module" src="/js/auth/signupProgressive.js"></script>
+  <script type="module" src="/js/auth/authChecker.js"></script>
 
   <!-- Simple Modal HTML -->
   <div id="termsModal" class="modal" style="
@@ -557,7 +636,7 @@
               font-weight: var(--font-weight-600);
               margin-bottom: var(--space-3);
             ">
-          By using CitizenLink, you agree to the following terms:
+          By using DRIMS, you agree to the following terms:
         </h4>
         <ul style="padding-left: var(--space-6)">
           <li>Provide accurate information when filing complaints</li>
@@ -716,9 +795,9 @@
     </div>
   </div>
 
-  <script src="/js/signup-modal.js"></script>
-  <script type="module" src="/js/auth/signup-page.js"></script>
-  <script type="module" src="/js/auth/signup-progressive.js"></script>
+  <script type="module" src="/js/auth/signupModal.js"></script>
+  <script type="module" src="/js/utils/theme.js"></script>
+  <script type="module" src="/js/auth/signupPage.js"></script>
 </body>
 
 </html>

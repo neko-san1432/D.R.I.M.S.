@@ -3,6 +3,7 @@ const ComplaintAssignmentRepository = require("../repositories/ComplaintAssignme
 const ComplaintHistoryRepository = require("../repositories/ComplaintHistoryRepository");
 const NotificationService = require("./NotificationService");
 const Database = require("../config/database");
+const { getTimelineStepKey } = require("../utils/complaintUtils");
 
 /**
  * LGU Officer Service
@@ -21,9 +22,54 @@ class LguOfficerService {
    * Get assigned tasks for an officer
    */
   async getAssignedTasks(officerId, filters = {}) {
-    const { status, priority, limit } = filters;
+    const { status, priority, limit, department } = filters;
 
-    // Get assignments
+    // DIRECT VISIBILITY MODE: If department is provided, fetch all complaints for the department
+    if (department) {
+      // Use findAll from repo which supports department filtering
+      // Note: findAll returns { complaints, total, ... }
+      const result = await this.complaintRepo.findAll({
+        department,
+        status,
+        limit: limit || 50, // Default limit if not specified
+        page: 1
+      });
+
+      const complaints = result.complaints || [];
+
+      // Map complaints to "Task" structure for frontend compatibility
+      return complaints.map(complaint => {
+        return {
+          id: `direct-${complaint.id}`, // specific ID for direct tasks
+          complaint_id: complaint.id,
+          assigned_by: null, // System / Direct
+          status: complaint.workflow_status === "new" ? "assigned" : (complaint.workflow_status || "assigned"), // Map 'new' to 'assigned' for officer view
+          notes: null,
+          priority: complaint.priority,
+          deadline: null,
+          assigned_at: complaint.submitted_at, // Use submission time as assignment time
+          created_at: complaint.submitted_at,
+          updated_at: complaint.updated_at,
+          completed_at: complaint.resolved_at,
+          complaint: {
+            id: complaint.id,
+            title: complaint.description?.slice(0, 100) || "complaint Details",
+            description: complaint.description,
+            category: complaint.category,
+            subcategory: complaint.subcategory,
+            status: complaint.workflow_status, // Use accurate workflow status
+            priority: complaint.priority,
+            submitted_at: complaint.submitted_at,
+            location_text: complaint.location_text,
+            latitude: complaint.latitude,
+            longitude: complaint.longitude,
+            last_activity_at: complaint.last_activity_at
+          }
+        };
+      });
+    }
+
+    // LEGACY / ASSIGNMENT MODE: Get specific assignments
     const assignments = await this.assignmentRepo.findByOfficer(officerId, { status, priority, limit });
 
     if (!assignments || assignments.length === 0) {
@@ -34,7 +80,7 @@ class LguOfficerService {
     const complaintIds = assignments.map(a => a.complaint_id);
     const complaints = await this.complaintRepo.findByIds(
       complaintIds,
-      "id, title, descriptive_su, category, subcategory, status, priority, submitted_at, location_text, latitude, longitude, last_activity_at"
+      "id, description, category, subcategory, status, priority, submitted_at, location_text, latitude, longitude, last_activity_at"
     );
 
     // Deduplicate assignments by complaint_id (keep the most recent one)
@@ -64,8 +110,8 @@ class LguOfficerService {
         completed_at: assignment.completed_at,
         complaint: complaint ? {
           id: complaint.id,
-          title: complaint.title,
-          description: complaint.descriptive_su,
+          title: complaint.description?.slice(0, 100) || "complaint Details",
+          description: complaint.description,
           category: complaint.category,
           subcategory: complaint.subcategory,
           status: complaint.status,
@@ -77,7 +123,7 @@ class LguOfficerService {
           last_activity_at: complaint.last_activity_at
         } : {
           id: assignment.complaint_id,
-          title: "Complaint Details Not Available",
+          title: "complaint Details Not Available",
           description: "Details could not be loaded",
           category: "General",
           subcategory: "unknown",
@@ -104,7 +150,7 @@ class LguOfficerService {
     const complaintIds = assignments.map(a => a.complaint_id);
     const complaints = await this.complaintRepo.findByIds(
       complaintIds,
-      "id, title, descriptive_su, category, subcategory, status, submitted_at, location_text, last_activity_at"
+      "id, description, category, subcategory, status, submitted_at, location_text, last_activity_at"
     );
 
     // Deduplicate assignments
@@ -148,8 +194,8 @@ class LguOfficerService {
           completed_at: assignment.completed_at,
           complaint: complaint ? {
             id: complaint.id,
-            title: complaint.title,
-            description: complaint.descriptive_su,
+            title: complaint.description?.slice(0, 100) || "complaint Details",
+            description: complaint.description,
             category: complaint.category,
             subcategory: complaint.subcategory,
             status: complaint.status,
@@ -158,7 +204,7 @@ class LguOfficerService {
             last_activity_at: complaint.last_activity_at
           } : {
             id: assignment.complaint_id,
-            title: "Complaint Details Not Available",
+            title: "complaint Details Not Available",
             description: "Details could not be loaded",
             category: "General",
             subcategory: "unknown",
@@ -210,7 +256,7 @@ class LguOfficerService {
         `Officer updated task status to "${status}" for complaint ${assignment.complaint_id}`,
         {
           priority: "info",
-          link: "/lgu-admin/assignments",
+          link: "/assignments",
           metadata: {
             assignment_id: assignmentId,
             complaint_id: assignment.complaint_id,
@@ -252,7 +298,7 @@ class LguOfficerService {
         await this.notificationService.createNotification(
           complaint.submitted_by,
           "officer_update",
-          "Update on Your Complaint",
+          "Update on Your complaint",
           `Officer added an update: "${message.substring(0, 100)}${message.length > 100 ? "..." : ""}"`,
           {
             priority: "info",
@@ -277,10 +323,20 @@ class LguOfficerService {
       throw new Error("Resolution notes are required");
     }
 
+    // [TIMELINE] Update comment JSON for resolution phase
+    const complaint = await this.complaintRepo.findById(complaintId);
+    const currentComment = complaint.comment || {};
+    currentComment["resolved"] = {
+      date: new Date().toISOString(),
+      comment: resolutionNotes,
+      user_id: officerId
+    };
+
     // Update complaint status
-    const updatedComplaint = await this.complaintRepo.update(complaintId, {
+    const updatedcomplaint = await this.complaintRepo.update(complaintId, {
       status: "resolved by officer",
-      workflow_status: "pending_approval",
+      workflow_status: "action_taken", // Matches steps: action_taken
+      comment: currentComment,
       resolution_notes: resolutionNotes,
       resolved_by: officerId,
       resolved_at: new Date().toISOString(),
@@ -300,10 +356,10 @@ class LguOfficerService {
     // Notify citizen for confirmation
     try {
       await this.notificationService.createNotification(
-        updatedComplaint.submitted_by,
+        updatedcomplaint.submitted_by,
         "complaint_resolved",
-        "Complaint Resolved",
-        `Your complaint "${updatedComplaint.title}" has been resolved. Please confirm if you're satisfied with the resolution.`,
+        "complaint Resolved",
+        `Your complaint "${updatedcomplaint.description?.slice(0, 100) || "your complaint"}" has been resolved. Please confirm if you're satisfied with the resolution.`,
         {
           priority: "success",
           link: `/citizen/complaints/${complaintId}`,
@@ -318,7 +374,7 @@ class LguOfficerService {
       console.warn("[LGU_OFFICER_SERVICE] Failed to notify citizen:", notifError.message);
     }
 
-    return updatedComplaint;
+    return updatedcomplaint;
   }
 
   /**
@@ -404,6 +460,55 @@ class LguOfficerService {
     return [];
   }
 
+  /**
+   * Update complaint status and add comment
+   */
+  async updatecomplaintStatus(complaintId, officerId, status, comment) {
+    // 1. Prepare data
+    const updateData = {
+      date: new Date().toISOString(),
+      comment
+    };
+
+    // 2. [TIMELINE] Map status to timeline step key
+    const stepKey = getTimelineStepKey(status) || status;
+
+    // 3. Update via Repo
+    const updatedcomplaint = await this.complaintRepo.updateStatusAndComment(
+      complaintId,
+      stepKey, // Use stepKey as the mapping key
+      updateData,
+      status // Pass raw status to update workflow_status
+    );
+
+    // 3. Create Notification
+    // Notify citizen if relevant
+    if (updatedcomplaint.submitted_by) {
+      try {
+        if (comment) {
+          await this.notificationService.notifycomplaintUpdate(
+            updatedcomplaint.submitted_by,
+            complaintId,
+            updatedcomplaint.description?.slice(0, 100) || "Your complaint",
+            comment
+          );
+        } else {
+          await this.notificationService.notifycomplaintStatusChanged(
+            updatedcomplaint.submitted_by,
+            complaintId,
+            updatedcomplaint.description?.slice(0, 100) || "Your complaint",
+            status,
+            "previous" // Placeholder if old status not easily available here
+          );
+        }
+      } catch (err) {
+        console.warn("Failed to notify citizen:", err);
+      }
+    }
+
+    return updatedcomplaint;
+  }
+
   // Helper methods
   _getActivityType(activity) {
     if (activity.completed_at) return "task_completed";
@@ -414,7 +519,7 @@ class LguOfficerService {
   }
 
   _getActivityDescription(activity, complaint = null) {
-    const complaintTitle = complaint?.title || `Complaint #${activity.complaint_id?.substring(0, 8)}`;
+    const complaintTitle = complaint?.description?.slice(0, 100) || `complaint #${activity.complaint_id?.substring(0, 8)}`;
     const complaintCategory = complaint?.category || "General";
     switch (this._getActivityType(activity)) {
       case "task_completed":

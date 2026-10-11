@@ -3,7 +3,7 @@ const NotificationService = require("./NotificationService");
 
 class OfficeConfirmationService {
   constructor() {
-    this.db = new Database();
+    this.db = Database.getInstance();
     this.supabase = this.db.getClient();
     this.notificationService = new NotificationService();
   }
@@ -20,7 +20,7 @@ class OfficeConfirmationService {
         .from("user_profiles") // Assuming user_profiles or similar table holds department info.
         // Wait, looking at other files, department might be in metadata or a separate table.
         // Let's check how other services get officer department.
-        // ComplianceService uses auth.users metadata.
+        // complianceService uses auth.users metadata.
         // Let's assume for now we query task_forces directly where the officer might be involved.
         // Actually, task_forces usually link to a department or specific users.
         // Let's check the task_forces schema if possible, but I can't see it directly.
@@ -35,11 +35,11 @@ class OfficeConfirmationService {
         // Query task_forces joined with complaints
         .select(`
           *,
-          complaint:complaints(id, title, description, status, location_text)
+          complaint:complaints(id, description, status, location_text)
         `)
         .eq("status", "pending_confirmation") // Assuming a status column
         // .eq('assigned_to', officerId) // If assigned to specific person
-        // OR .eq('department_id', officerDepartmentId)
+        // OR .eq('department_id', officerdepartmentId)
         ;
 
       // WAIT, I don't know the exact schema of 'task_forces'.
@@ -65,7 +65,7 @@ class OfficeConfirmationService {
           complaint:complaints (
             id,
             title,
-            descriptive_su,
+            description,
             location_text,
             priority
           ),

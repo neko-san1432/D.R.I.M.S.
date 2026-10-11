@@ -8,7 +8,7 @@ const Database = require("../config/database");
 let supabaseInstance = null;
 function getSupabase() {
   if (!supabaseInstance) {
-    const db = new Database();
+    const db = Database.getInstance();
     supabaseInstance = db.getClient();
   }
   return supabaseInstance;
@@ -21,7 +21,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 /**
  * Get all valid department codes from database
  */
-async function getValidDepartmentCodes() {
+async function getValiddepartmentCodes() {
   const now = Date.now();
   // Return cached data if still valid
   if (departmentCodesCache && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
@@ -47,12 +47,12 @@ async function getValidDepartmentCodes() {
 }
 /**
  * Validate if a department code exists and is active
- * @param {string} code - Department code to validate
+ * @param {string} code - department code to validate
  * @returns {Promise<boolean>} True if valid
  */
-async function isValidDepartmentCode(code) {
+async function isValiddepartmentCode(code) {
   if (!code || typeof code !== "string") return false;
-  const validCodes = await getValidDepartmentCodes();
+  const validCodes = await getValiddepartmentCodes();
   return validCodes.includes(code.toUpperCase());
 }
 /**
@@ -72,42 +72,32 @@ async function validateUserRole(role) {
   }
   const roleLower = role.toLowerCase().trim();
   // Check for valid role patterns
-  let roleType = null;
-  let departmentCode = null;
-  // Simplified LGU roles
-  if (roleLower === "lgu-admin") {
-    roleType = "lgu-admin";
-    departmentCode = null; // Department stored separately in metadata
-  }
-  else if (roleLower === "lgu-hr") {
-    roleType = "lgu-hr";
-    departmentCode = null; // Department stored separately in metadata
-  }
-  else if (roleLower === "lgu" || roleLower === "lgu-officer") {
-    // Accept both 'lgu' and 'lgu-officer' for backward compatibility
-    roleType = "lgu-officer";
-    departmentCode = null; // Department stored separately in metadata
-  }
-  // Other valid roles (citizen, complaint-coordinator, super-admin)
-  else if (["citizen", "complaint-coordinator", "super-admin"].includes(roleLower)) {
-    return {
-      isValid: true,
-      roleType: roleLower,
-      departmentCode: null,
-      error: null
-    };
-  }
-  else {
+  const roleType = null;
+  const departmentCode = null;
+
+  // Simple Workflow Mode Check
+  const isSimpleMode = process.env.SIMPLE_WORKFLOW_MODE === "true";
+
+  const allowedRoles = ["citizen", "lgu", "super-admin"];
+  if (!allowedRoles.includes(roleLower)) {
     return {
       isValid: false,
       roleType: null,
       departmentCode: null,
-      error: "Invalid role format. Must be lgu-admin-{dept}, lgu-hr-{dept}, lgu-{dept}, or system role"
+      error: "Invalid role. Only Citizen, LGU, and Super Admin are supported."
     };
   }
+
+  return {
+    isValid: true,
+    roleType: roleLower,
+    departmentCode: null,
+    error: null
+  };
+
   // Validate department code for LGU roles
   if (departmentCode) {
-    const isValidDept = await isValidDepartmentCode(departmentCode);
+    const isValidDept = await isValiddepartmentCode(departmentCode);
     if (!isValidDept) {
       return {
         isValid: false,
@@ -138,44 +128,28 @@ function normalizeRole(role) {
 
   const roleLower = role.toLowerCase().trim();
 
-  // Standard roles that don't need normalization
-  if (["citizen", "super-admin", "complaint-coordinator"].includes(roleLower)) {
-    return roleLower;
+  // 3-Role System Mapping
+  if (roleLower === "super-admin") return "super-admin";
+  if (roleLower === "citizen") return "citizen";
+
+  // Legacy or complex roles map to 'lgu'
+  if (
+    roleLower === "lgu" ||
+    roleLower.startsWith("lgu-") ||
+    roleLower === "complaint-coordinator"
+  ) {
+    return "lgu";
   }
 
-  // Handle simplified LGU roles
-  if (roleLower === "lgu-admin") return "lgu-admin";
-  if (roleLower === "lgu-hr") return "lgu-hr";
-  if (roleLower === "lgu") return "lgu";
-
-  // Normalize any role ending with -officer to base role
-  // e.g., lgu-officer → lgu, anyrole-officer → anyrole
-  if (roleLower.endsWith("-officer")) {
-    const baseRole = roleLower.replace(/-officer$/, "");
-    // If base role is valid, return it; otherwise keep original
-    if (["lgu", "lgu-admin", "lgu-hr"].includes(baseRole)) {
-      return baseRole;
-    }
-    // For other roles ending in -officer, remove the suffix
-    return baseRole || "citizen";
-  }
-
-  // Handle legacy department-scoped roles (optional normalization)
-  // lgu-admin-{dept} → lgu-admin (if you want to simplify)
-  // Currently keeping as-is, but can be enabled if needed:
-  // if (roleLower.startsWith('lgu-admin-')) return 'lgu-admin';
-  // if (roleLower.startsWith('lgu-hr-')) return 'lgu-hr';
-
-  // Default: return as-is or citizen
-  return roleLower || "citizen";
+  return "citizen";
 }
 
 /**
  * Extract department code from role
  * @param {string} role - User role
- * @returns {string|null} Department code or null
+ * @returns {string|null} department code or null
  */
-function extractDepartmentCode(role) {
+function extractdepartmentCode(role) {
   if (!role || typeof role !== "string") return null;
   // With simplified roles, department is stored separately in metadata
   // This function now returns null as department is not extracted from role
@@ -183,10 +157,10 @@ function extractDepartmentCode(role) {
 }
 /**
  * Get department info by code
- * @param {string} code - Department code
- * @returns {Promise<Object|null>} Department info or null
+ * @param {string} code - department code
+ * @returns {Promise<Object|null>} department info or null
  */
-async function getDepartmentByCode(code) {
+async function getdepartmentByCode(code) {
   if (!code) return null;
   try {
     const supabase = getSupabase();
@@ -206,7 +180,7 @@ async function getDepartmentByCode(code) {
 /**
  * Clear the department codes cache
  */
-function clearDepartmentCodesCache() {
+function cleardepartmentCodesCache() {
   departmentCodesCache = null;
   cacheTimestamp = null;
 }
@@ -214,7 +188,7 @@ function clearDepartmentCodesCache() {
  * Get all valid department codes with names
  * @returns {Promise<Array>} Array of {code, name} objects
  */
-async function getValidDepartments() {
+async function getValiddepartments() {
   try {
     const supabase = getSupabase();
     const { data, error } = await supabase
@@ -231,12 +205,12 @@ async function getValidDepartments() {
 }
 
 module.exports = {
-  getValidDepartmentCodes,
-  isValidDepartmentCode,
+  getValiddepartmentCodes,
+  isValiddepartmentCode,
   validateUserRole,
   normalizeRole,
-  extractDepartmentCode,
-  getDepartmentByCode,
-  clearDepartmentCodesCache,
-  getValidDepartments
+  extractdepartmentCode,
+  getdepartmentByCode,
+  cleardepartmentCodesCache,
+  getValiddepartments
 };

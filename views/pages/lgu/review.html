@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..800;1,300..800&display=swap"
+    rel="stylesheet" />
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Review complaint - DRIMS</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="/css/base/style.css" />
+  <link rel="stylesheet" href="/css/components/toast.css" />
+  <link rel="stylesheet" href="/css/components/sidebar.css" />
+  <link rel="stylesheet" href="/css/base/app.css" />
+  <link rel="stylesheet" href="/css/components/header.css" />
+  <link rel="stylesheet" href="/css/pages/dashboardCommon.css" />
+  <link rel="stylesheet" href="/css/layouts/viewportFix.css" />
+  <link rel="stylesheet" href="/css/pages/complaintDetails.css" />
+  <style>
+    /* ── Coordinator Review Page Overrides ──
+       complaint-details.css locks every ancestor to overflow:hidden + fixed
+       heights for its 3-column grid layout. This page is NOT a 3-column grid
+       — it's a sequential flow. Break the hidden chain on desktop. */
+
+    html, body {
+      overflow: auto !important;
+      height: auto !important;
+    }
+
+    #app.coordinator-review {
+      height: auto !important;
+      min-height: 100vh;
+      overflow: visible !important;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #app.coordinator-review .dashboard-main-wrapper {
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      flex: 1;
+      padding: 0 !important;
+    }
+
+    #app.coordinator-review .main-content {
+      overflow: visible !important;
+      height: auto !important;
+      flex: 1;
+      padding: 0 !important;
+    }
+
+    #app.coordinator-review .container {
+      overflow: visible !important;
+      height: auto !important;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px !important;
+    }
+
+    /* The wrapper that replaced complaint-details */
+    .review-wrapper {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 16px !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    /* The inner .complaint-content is the actual 2-column grid */
+    .review-wrapper .complaint-content {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .review-wrapper .glass-panel {
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    .action-buttons-container {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .modal { z-index: 9999; }
+
+    @media (max-width: 768px) {
+      .review-wrapper .complaint-content {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-container">
+    <div id="sidebar" class="collapsible"></div>
+
+    <div id="app" class="coordinator-review">
+      <div class="header-container"></div>
+      <main class="main-content">
+      <div class="container">
+        <div class="review-wrapper" id="complaint-details">
+
+          <a href="/review-queue" class="back-button breadcrumb-link"
+            style="margin-bottom: 12px; display: inline-flex; align-items: center; gap: 6px; color: #64748b; font-size: 0.9rem;">
+            <i class="icon-arrow-left"></i> Back to Queue
+          </a>
+
+          <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading complaint details...</p>
+          </div>
+
+    <div id="error-message" class="empty-state" style="display: none">
+      <h2>⚠️ Error Loading complaint</h2>
+      <p id="error-text"></p>
+      <button id="return-dashboard-btn" class="btn btn-primary">
+        Return to Dashboard
+      </button>
+    </div>
+
+    <div id="complaint-content" style="display: none; width: 100%;">
+
+      <!-- complaint Header (Glass Panel) -->
+      <div class="complaint-header glass-panel mb-6">
+        <div class="complaint-title-section">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <span id="complaint-category-badge"
+              style="background: #2563eb; color: white; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.9rem; text-transform: uppercase;">CAT</span>
+            <span id="complaint-id-header" class="complaint-id" style="color: #4b5563;">#ID</span>
+          </div>
+
+          <h1 id="complaint-cat-subcat" class="complaint-title" style="font-size: 1.35rem; font-weight: 700; color: #1e293b;">Category - Subcategory</h1>
+
+          <div class="complaint-meta mt-3">
+            <!-- Re-using existing status logic but wrapped in new structure -->
+            <div class="flex items-center gap-2" style="margin-right: 12px;">
+              <!-- Status Changer (Preserved) -->
+              <div class="flex flex-col gap-2 w-full">
+                <div class="flex items-center gap-2">
+                  <label for="status-select" style="font-size: 0.85rem; font-weight: 600; color: #374151;">Update
+                    Status:</label>
+                  <select id="status-select"
+                    style="padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; flex: 1; color: #1f2937; background-color: #fff;">
+                    <option value="pending">Pending</option>
+                    <option value="submitted">Submitted</option>
+                    <option value="verified">Verified</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="action_taken">Action Taken</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  <button id="update-status-btn" class="btn btn-sm btn-primary"
+                    style="padding: 4px 12px; font-size: 0.8rem;">Update Status</button>
+                </div>
+                <textarea id="status-notes" placeholder="Add a comment or note about this update (optional)"
+                  style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; min-height: 60px; resize: vertical; color: #1f2937;"></textarea>
+              </div>
+            </div>
+
+            <span id="complaint-status" class="complaint-status">---</span>
+            <span id="complaint-priority" class="complaint-priority">---</span>
+            <span id="submitted-date" class="text-sm text-gray-500">---</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status Timeline -->
+      <div class="status-timeline glass-panel mb-6">
+        <h3 class="text-lg font-bold mb-4">Status Progress</h3>
+        <div id="timeline-items" class="progress-stepper">
+          <!-- Will be populated by JS -->
+        </div>
+      </div>
+
+      <!-- High Confidence Duplicate Alert -->
+      <div id="high-confidence-duplicate-alert" class="duplicate-alert high-confidence"
+        style="display: none; margin-bottom: 16px;">
+        <div class="alert-content">
+          <div class="alert-icon">⚠️</div>
+          <div class="alert-text">
+            <strong>High Confidence Duplicate Detected</strong>
+            <p>This complaint has been flagged as a potential duplicate.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Content Grid (complaint Details + Actions) -->
+      <div class="complaint-content">
+
+        <!-- Details Column -->
+        <div class="content-section glass-panel">
+          <h3>📋 complaint Details</h3>
+
+          <div class="detail-row" style="margin-bottom: 12px;">
+            <div class="detail-label">Type & Subtype</div>
+            <div class="detail-value">
+              <span id="complaint-type"></span>
+              <span id="complaint-subtype"></span>
+            </div>
+          </div>
+
+          <div class="detail-row" style="margin-bottom: 12px;">
+            <div class="detail-label">Description</div>
+            <div class="detail-value" id="complaint-description"></div>
+          </div>
+
+          <div class="detail-row">
+            <div class="detail-label">Location</div>
+            <div class="detail-value" id="complaint-location"></div>
+            <div class="map-action-buttons" style="display: flex; gap: 10px; margin: 8px 0;">
+              <button id="toggle-boundary-btn" class="btn btn-sm btn-secondary" type="button"
+                style="display: none">Bounds</button>
+              <button id="map-fullscreen-btn" class="btn btn-sm btn-secondary" type="button"
+                style="display: none">Fullscreen</button>
+            </div>
+            <div class="location-map" id="location-map" style="height: 250px; border-radius: 8px; width: 100%;"></div>
+          </div>
+
+          <div class="detail-row" id="evidence-section" style="margin-top: 16px;">
+            <div class="detail-label">Evidence</div>
+            <div id="evidence-empty" style="color: #666; font-size: 0.95rem">No evidence uploaded.</div>
+            <div class="evidence-grid" id="evidence-grid"></div>
+          </div>
+        </div>
+
+        <!-- Side Column: Actions & Complainant Info -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+
+          <!-- Complainant Info -->
+          <div class="content-section glass-panel" id="complainant-info-panel">
+            <h3>👤 Complainant Information</h3>
+            <div id="complainant-info-content">
+              <div class="complainant-loading">Loading...</div>
+            </div>
+          </div>
+
+          <!-- Actions Panel -->
+          <div class="content-section glass-panel">
+            <h3>✅ Take Action</h3>
+            <div class="action-buttons-container" style="flex-direction: column;">
+
+              <button class="btn btn-warning w-full" id="duplicate-btn" style="display: none">🔗 Mark as
+                Duplicate</button>
+              <button class="btn btn-secondary w-full" id="related-btn" style="display: none">📎 Link Related</button>
+              <button class="btn btn-danger w-full" id="reject-btn">❌ Reject / Mark as False</button>
+              <button class="btn btn-primary w-full" id="unique-btn" style="display: none">✓ Mark as Unique</button>
+            </div>
+          </div>
+
+          <div id="similar-section" class="content-section glass-panel" style="display: none;">
+            <h3>⚠️ Similar complaints</h3>
+            <div id="similar-list"></div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div><!-- /.review-wrapper -->
+
+  <!-- Mark as Duplicate Modal -->
+  <div id="duplicate-modal" class="modal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Mark as Duplicate</h2>
+          <button class="modal-close" id="close-duplicate-modal">
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="duplicate-form">
+            <div class="form-group">
+              <label for="master-complaint">Master complaint ID *</label>
+              <select id="master-complaint" required>
+                <option value="">Select master complaint...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="duplicate-reason">Reason *</label>
+              <textarea id="duplicate-reason" required placeholder="Why is this a duplicate?"></textarea>
+            </div>
+            <div class="decision-buttons">
+              <button type="submit" class="btn btn-warning">
+                Mark as Duplicate
+              </button>
+              <button type="button" class="btn btn-secondary" id="cancel-duplicate-btn">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reject / Mark as False Modal -->
+  <div id="reject-modal" class="modal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Reject or Mark as False</h2>
+          <button class="modal-close" id="close-reject-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="reject-form">
+            <div class="form-group mb-4">
+              <label for="reject-type" class="block text-sm font-semibold mb-1">Rejection Type *</label>
+              <select id="reject-type" class="form-control w-full p-2 border rounded" required>
+                <option value="standard">Standard Rejection</option>
+                <option value="false">Mark as False complaint (User Bad Behavior)</option>
+              </select>
+            </div>
+
+            <div class="form-group mb-4" id="false-reason-container" style="display: none;">
+              <label for="reject-false-reason" class="block text-sm font-semibold mb-1">Reason for Marking False
+                *</label>
+              <select id="reject-false-reason" class="form-control w-full p-2 border rounded">
+                <option value="">Select a reason...</option>
+                <option value="Spam or irrelevant content">Spam or irrelevant content</option>
+                <option value="False information">False information</option>
+                <option value="Duplicate complaint">Duplicate complaint</option>
+                <option value="Inappropriate content">Inappropriate content</option>
+                <option value="Not a valid complaint">Not a valid complaint</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="reject-reason" class="block text-sm font-semibold mb-1">Notes / Reason for Citizen *</label>
+              <textarea id="reject-reason" class="form-control w-full p-2 border rounded" required
+                placeholder="Please provide a clear reason for the citizen..."></textarea>
+            </div>
+
+            <div class="decision-buttons flex gap-2 justify-end mt-4">
+              <button type="button" class="btn btn-secondary" id="cancel-reject-btn">
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-danger" id="submit-reject-btn">
+                Confirm Rejection
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div><!-- /.reject-modal -->
+
+      </div><!-- /.container -->
+    </main><!-- /.main-content -->
+  </div><!-- /#app -->
+  </div><!-- /.app-container -->
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script type="module" src="/js/components/header.js"></script>
+  <script type="module" src="/js/components/sidebar.js"></script>
+  <script type="module" src="/js/auth/authChecker.js"></script>
+  <script type="module" src="/js/auth/roleToggle.js"></script>
+  <script type="module" src="/js/components/toast.js"></script>
+  <script type="module" src="/js/components/complaint/falsecomplaintMarker.js"></script>
+  <script type="module" src="/js/components/complaint/evidencePreview.js"></script>
+  <script type="module" src="/js/components/complaint/complaintMap.js"></script>
+  <script type="module" src="/js/lgu/review.js"></script>
+  <script type="module" src="/js/lgu/reviewInit.js"></script>
+</body>
+
+</html>

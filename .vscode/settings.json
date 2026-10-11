@@ -1,6 +1,7 @@
 {
     "sonarlint.connectedMode.project": {
         "connectionId": "neko-san1432",
-        "projectKey": "neko-san1432_CitizenLink"
-    }
+        "projectKey": "neko-san1432_DRIMS"
+    },
+    "CodeGPT.apiKey": "Ollama"
 }

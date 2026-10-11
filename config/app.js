@@ -9,7 +9,7 @@ class AppConfig {
     this.rootDir = join(__dirname, "..");
     this.publicDir = join(this.rootDir, "public");
     this.viewsDir = join(this.rootDir, "views");
-    this.uploadsDir = join(this.rootDir, "uplaoads");
+    this.uploadsDir = join(this.rootDir, "uploads");
     // Security (handled by Supabase)
     // Note: JWT and session secrets not needed - using Supabase Auth
     // External Services
@@ -22,7 +22,7 @@ class AppConfig {
       siteKey: process.env.CAPTCHA_CLIENT_KEY,
       secretKey: process.env.CAPTCHA_SECRET_KEY,
     };
-    // Application Settings
+    // Application settings
     this.upload = {
       maxFileSize: 10 * 1024 * 1024, // 10MB
       maxFiles: 5,

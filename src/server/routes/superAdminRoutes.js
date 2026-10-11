@@ -1,9 +1,14 @@
 const express = require("express");
 const SuperAdminController = require("../controllers/SuperAdminController");
 const { authenticateUser, requireRole } = require("../middleware/auth");
+const { validate, schemas } = require("../middleware/validation");
+const { csrfProtection } = require("../middleware/csrf");
 
 const router = express.Router();
 const superAdminController = new SuperAdminController();
+
+// SEC-16 FIX: CSRF protection on all state-changing routes
+router.use(csrfProtection);
 // All routes require Super Admin role
 const requireSuperAdmin = requireRole(["super-admin"]);
 /**
@@ -13,24 +18,24 @@ router.get("/dashboard", authenticateUser, requireSuperAdmin, (req, res) =>
   superAdminController.getDashboard(req, res)
 );
 /**
- * User Management
+ * User Management — SEC-19: Added Joi validation
  */
-router.post("/role-swap", authenticateUser, requireSuperAdmin, (req, res) =>
+router.post("/role-swap", authenticateUser, requireSuperAdmin, validate(schemas.roleSwap), (req, res) =>
   superAdminController.roleSwap(req, res)
 );
 /**
- * Ban/Unban Users
+ * Ban/Unban Users — SEC-19: Added Joi validation
  */
-router.post("/ban-user", authenticateUser, requireSuperAdmin, (req, res) =>
+router.post("/ban-user", authenticateUser, requireSuperAdmin, validate(schemas.banUser), (req, res) =>
   superAdminController.banUser(req, res)
 );
-router.post("/unban-user", authenticateUser, requireSuperAdmin, (req, res) =>
+router.post("/unban-user", authenticateUser, requireSuperAdmin, validate(schemas.unbanUser), (req, res) =>
   superAdminController.unbanUser(req, res)
 );
 // User listing and details for Super Admin
 router.get("/users", authenticateUser, requireSuperAdmin, async (req, res) => {
   try {
-    const UserService = require("../services/UserService");
+    const userService = require("../services/user/UserService");
 
     const { search, barangay, role, department, status, page, limit } =
       req.query;
@@ -39,13 +44,13 @@ router.get("/users", authenticateUser, requireSuperAdmin, async (req, res) => {
       page: page ? Number.parseInt(page) : 1,
       limit: limit ? Number.parseInt(limit) : 20,
     };
-    const result = await UserService.getUsers(filters, pagination);
+    const result = await userService.getUsers(filters, pagination);
     const filteredUsers = barangay
       ? (result.users || []).filter(
-          (u) =>
-            (u.address?.barangay || "").toLowerCase() ===
+        (u) =>
+          (u.address?.barangay || "").toLowerCase() ===
             String(barangay).toLowerCase()
-        )
+      )
       : result.users;
     return res.json({
       success: true,
@@ -66,9 +71,9 @@ router.get(
   requireSuperAdmin,
   async (req, res) => {
     try {
-      const UserService = require("../services/UserService");
+      const userService = require("../services/user/UserService");
 
-      const user = await UserService.getUserById(req.params.id);
+      const user = await userService.getUserById(req.params.id);
       if (!user)
         return res
           .status(404)
@@ -98,7 +103,7 @@ router.get(
         status: req.query.status,
         type: req.query.type,
       };
-      const result = await service.getUserComplaints(req.params.id, options);
+      const result = await service.getUsercomplaints(req.params.id, options);
       return res.json({
         success: true,
         data: result.complaints,
@@ -119,21 +124,23 @@ router.get(
   }
 );
 /**
- * Department Transfers
+ * department Transfers — SEC-19: Added Joi validation
  */
 router.post(
   "/transfer-department",
   authenticateUser,
   requireSuperAdmin,
-  (req, res) => superAdminController.transferDepartment(req, res)
+  validate(schemas.transferdepartment),
+  (req, res) => superAdminController.transferdepartment(req, res)
 );
 /**
- * Citizen Assignment
+ * Citizen Assignment — SEC-19: Added Joi validation
  */
 router.post(
   "/assign-citizen",
   authenticateUser,
   requireSuperAdmin,
+  validate(schemas.assignCitizen),
   (req, res) => superAdminController.assignCitizen(req, res)
 );
 /**

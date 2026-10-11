@@ -35,8 +35,8 @@ const idSchema = Joi.string()
 const reasonSchema = Joi.string().trim().min(5).max(500).required();
 
 const schemas = {
-  // Complaint Creation
-  createComplaint: Joi.object({
+  // complaint Creation
+  createcomplaint: Joi.object({
     title: Joi.string().trim().min(5).max(100).required(),
     description: Joi.string().trim().min(10).max(2000).required(),
     // type: Joi.string().trim().required(), // REMOVED: Obsolete
@@ -57,7 +57,21 @@ const schemas = {
   // Status Update
   updateStatus: Joi.object({
     status: Joi.string()
-      .valid("new", "assigned", "in_progress", "completed", "cancelled")
+      .valid(
+        "new",
+        "pending",
+        "submitted",
+        "verified",
+        "assigned",
+        "under_review",
+        "in_progress",
+        "action_taken",
+        "completed",
+        "resolved",
+        "closed",
+        "cancelled",
+        "rejected"
+      )
       .optional(),
     priority: Joi.string().valid("low", "medium", "high", "urgent").optional(),
     category: Joi.string().trim().optional(),
@@ -67,7 +81,8 @@ const schemas = {
 
   // Mark as False
   markAsFalse: Joi.object({
-    reason: reasonSchema,
+    reason: Joi.string().trim().min(2).max(500).required(),
+    notes: Joi.string().trim().allow("", null).optional(),
   }),
 
   // Mark as Duplicate
@@ -75,8 +90,8 @@ const schemas = {
     master_complaint_id: idSchema,
   }),
 
-  // Cancel Complaint
-  cancelComplaint: Joi.object({
+  // Cancel complaint
+  cancelcomplaint: Joi.object({
     reason: reasonSchema,
   }),
 
@@ -91,8 +106,8 @@ const schemas = {
     feedback: Joi.string().trim().max(1000).allow("", null).optional(),
   }),
 
-  // Transfer Complaint
-  transferComplaint: Joi.object({
+  // Transfer complaint
+  transfercomplaint: Joi.object({
     to_dept: Joi.string().required(),
     reason: reasonSchema,
   }),
@@ -110,6 +125,38 @@ const schemas = {
   // Params validation (e.g. for /:id)
   paramsId: Joi.object({
     id: idSchema,
+  }),
+
+  // SEC-19: Super Admin schemas
+  roleSwap: Joi.object({
+    user_id: idSchema,
+    new_role: Joi.string().valid("citizen", "lgu", "super-admin").required(),
+    reason: reasonSchema,
+  }),
+
+  banUser: Joi.object({
+    user_id: idSchema,
+    type: Joi.string().valid("temporary", "permanent").default("permanent"),
+    duration: Joi.number().integer().min(1).max(365).optional(),
+    reason: reasonSchema,
+  }),
+
+  unbanUser: Joi.object({
+    user_id: idSchema,
+  }),
+
+  transferdepartment: Joi.object({
+    user_id: idSchema,
+    from_department: Joi.string().trim().required(),
+    to_department: Joi.string().trim().required(),
+    reason: reasonSchema,
+  }),
+
+  assignCitizen: Joi.object({
+    user_id: idSchema,
+    role: Joi.string().valid("citizen", "lgu", "super-admin").required(),
+    department_id: Joi.string().trim().allow("", null).optional(),
+    reason: reasonSchema,
   }),
 };
 

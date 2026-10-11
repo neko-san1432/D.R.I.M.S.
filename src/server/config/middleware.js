@@ -24,17 +24,57 @@ const setupMiddleware = (app) => {
   app.use(enforceHTTPS);
 
   // Enhanced security headers (applied first)
-  if (!config.isDevelopment) {
-    app.use(securityHeaders);
-    app.use(customSecurityHeaders);
-  } else {
-    // console.log("⚠️  Security headers disabled in development mode");
-  }
+  // SEC-24 FIX: Apply security headers in ALL environments
+  app.use(securityHeaders);
+  app.use(customSecurityHeaders);
 
   // Body parsing middleware (before rate limiting to allow proper request inspection)
-  app.use(cors());
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+  // SEC-10 FIX: Restrict CORS to known origins
+  // IMPORTANT: Scope CORS to /api only so static assets (/js, /css) are never blocked.
+  const isProduction = process.env.NODE_ENV === "production";
+  const allowedOrigins = [
+    `http://localhost:${config.port}`,
+    `http://127.0.0.1:${config.port}`,
+    process.env.PRODUCTION_URL,
+  ].filter(Boolean);
+
+  const isDevLanOrigin = (origin) => {
+    try {
+      const url = new URL(String(origin));
+      const host = url.hostname;
+      // local hostnames
+      if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0") return true;
+      if (host.endsWith(".local")) return true;
+      // private IPv4 ranges (LAN testing)
+      if (/^10\./.test(host)) return true;
+      if (/^192\.168\./.test(host)) return true;
+      if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return true;
+      return false;
+    } catch (_e) {
+      return false;
+    }
+  };
+
+  app.use(
+    "/api",
+    cors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (server-to-server, curl, same-origin navigation)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+
+        // Allow LAN and remote origins for testing the dev login in production
+        if (isDevLanOrigin(origin) || origin.includes("drims.dpdns.org")) return callback(null, true);
+
+        return callback(new Error("Not allowed by CORS"));
+      },
+      credentials: true,
+    })
+  );
+  // SEC-23 FIX: Reduce default body limit to 1MB (upload routes override per-route)
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "1mb" }));
   app.use(cookieParser());
 
   // Rate limiting (applied early to protect against abuse)
@@ -64,16 +104,40 @@ const setupMiddleware = (app) => {
       path.join(config.rootDir, "public", "assets", "json", "digos-city-boundary.json")
     );
   });
-  app.get("/data/geographic/brgy_boundaries_location.json", (req, res) => {
+  app.get("/data/geographic/brgyBoundariesLocation.json", (req, res) => {
     res.sendFile(
       path.join(
         config.rootDir,
         "public",
         "assets",
         "json",
-        "brgy_boundaries_location.json"
+        "brgyBoundariesLocation.json"
       )
     );
+  });
+  // Fix for root request 404
+  app.get("/brgyBoundariesLocation.json", (req, res) => {
+    res.sendFile(
+      path.join(
+        config.rootDir,
+        "public",
+        "assets",
+        "json",
+        "brgyBoundariesLocation.json"
+      )
+    );
+  });
+
+  // Dynamic route for NLP dictionaries (extracted from brainConfig.json)
+  app.get(["/nlp_dictionaries.json", "/assets/data/nlp_dictionaries.json"], (req, res) => {
+    try {
+      const fs = require("fs");
+      const configPath = path.join(config.rootDir, "public", "assets", "json", "brainConfig.json");
+      const brainConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      res.json(brainConfig.dictionaries || {});
+    } catch (e) {
+      res.status(404).json({ error: "Dictionary not found" });
+    }
   });
 
   // Serve static files with proper paths
@@ -87,19 +151,11 @@ const setupMiddleware = (app) => {
     "/assets",
     express.static(path.join(config.rootDir, "public", "assets"))
   );
-  app.use("/uploads", express.static(path.join(config.rootDir, "uploads")));
+  // SEC-18 FIX: uploads served through authenticated route instead of public static
+  // app.use("/uploads", express.static(path.join(config.rootDir, "uploads")));
   app.use("/public", express.static(path.join(config.rootDir, "public")));
 
-  // Fallback to src/client for legacy paths
-  app.use("/js", express.static(path.join(config.rootDir, "src", "client")));
-  app.use(
-    "/css",
-    express.static(path.join(config.rootDir, "src", "client", "styles"))
-  );
-  app.use(
-    "/assets",
-    express.static(path.join(config.rootDir, "src", "client", "assets"))
-  );
+  // Legacy src/client fallback mounts removed — all files consolidated into public/
 
   // Additional static file serving for coordinator review system
   app.use(
@@ -111,11 +167,9 @@ const setupMiddleware = (app) => {
     express.static(path.join(config.rootDir, "public", "styles"))
   );
 
-  // Serve node_modules for browser imports (ESM modules)
-  app.use(
-    "/node_modules",
-    express.static(path.join(config.rootDir, "node_modules"))
-  );
+  // SEC-03 FIX: node_modules static mount REMOVED for security.
+  // Bundle required client-side libraries into public/ instead.
+  // app.use("/node_modules", express.static(path.join(config.rootDir, "node_modules")));
 };
 
 /**

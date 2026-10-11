@@ -1,7 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const IDVerificationService = require("../services/IDVerificationService");
+const iDVerificationService = require("../services/IDVerificationService");
 const { authenticateUser } = require("../middleware/auth");
+const { csrfProtection } = require("../middleware/csrf");
+
+// SEC-16 FIX: CSRF protection on all state-changing routes
+router.use(csrfProtection);
 
 /**
  * Store ID verification data after OCR processing
@@ -30,7 +34,7 @@ router.post("/store", authenticateUser, async (req, res) => {
     }
 
     // Check if ID number already exists
-    const exists = await IDVerificationService.checkIdNumberExists(fields.idNumber);
+    const exists = await iDVerificationService.checkIdNumberExists(fields.idNumber);
     if (exists) {
       return res.status(409).json({
         success: false,
@@ -40,7 +44,7 @@ router.post("/store", authenticateUser, async (req, res) => {
     }
 
     // Store verification data
-    const verification = await IDVerificationService.storeVerification(userId, {
+    const verification = await iDVerificationService.storeVerification(userId, {
       idType,
       fields,
       confidence
@@ -90,7 +94,7 @@ router.get("/status", authenticateUser, async (req, res) => {
       });
     }
 
-    const verification = await IDVerificationService.getVerificationStatus(userId);
+    const verification = await iDVerificationService.getVerificationStatus(userId);
 
     if (!verification) {
       return res.json({
@@ -128,7 +132,7 @@ router.get("/status", authenticateUser, async (req, res) => {
  * POST /api/verification/check-id
  * Body: { idNumber }
  */
-router.post("/check-id", async (req, res) => {
+router.post("/check-id", authenticateUser, async (req, res) => {
   try {
     const { idNumber } = req.body;
 
@@ -139,7 +143,7 @@ router.post("/check-id", async (req, res) => {
       });
     }
 
-    const exists = await IDVerificationService.checkIdNumberExists(idNumber);
+    const exists = await iDVerificationService.checkIdNumberExists(idNumber);
 
     return res.json({
       success: true,

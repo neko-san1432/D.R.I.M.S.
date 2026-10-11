@@ -32,7 +32,7 @@ const handlePasswordResetError = async (
       "  2. RedirectTo URL not whitelisted in Supabase Dashboard → Authentication → URL Configuration"
     );
     console.error(
-      "  3. SMTP/SES not configured in Supabase Dashboard → Settings → Auth"
+      "  3. SMTP/SES not configured in Supabase Dashboard → settings → Auth"
     );
     console.error("  4. Supabase project email service issue");
 
@@ -93,11 +93,11 @@ const handlePasswordResetError = async (
     details:
       process.env.NODE_ENV === "development"
         ? {
-            message: error.message,
-            code: error.code,
-            status: error.status,
-            note: "This error usually means email sending is disabled in Supabase Dashboard -> Authentication -> Email",
-          }
+          message: error.message,
+          code: error.code,
+          status: error.status,
+          note: "This error usually means email sending is disabled in Supabase Dashboard -> Authentication -> Email",
+        }
         : null,
   });
 };

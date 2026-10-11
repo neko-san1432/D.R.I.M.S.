@@ -1,4 +1,7 @@
 :root {
+  --sidebar-width-expanded: 260px;
+  --sidebar-width-collapsed: 72px;
+  --sidebar-brand-height: 56px;
   --color-surface: #ffffff;
   --color-text: #1f2937;
   --color-line: #e5e7eb;
@@ -18,18 +21,18 @@
 }
 
 html.dark {
-  --color-surface: #1f2937;
+  --color-surface: #0f172a;
   --color-text: #f3f4f6;
-  --color-line: #374151;
-  --sidebar-bg: #1f2937;
+  --color-line: #1e293b;
+  --sidebar-bg: #0f172a;
   --sidebar-text: #f3f4f6;
-  --sidebar-hover: #374151;
+  --sidebar-hover: #1e293b;
   --sidebar-active: #3b82f6;
-  --sidebar-border: #374151;
+  --sidebar-border: #1e293b;
   --sidebar-shadow: rgba(0, 0, 0, 0.3);
-  --sidebar-brand-bg: #111827;
-  --sidebar-search-bg: #374151;
-  --sidebar-footer-bg: #111827;
+  --sidebar-brand-bg: #0f172a;
+  --sidebar-search-bg: #1e293b;
+  --sidebar-footer-bg: #0f172a;
   /* Z-index variables remain the same in dark mode */
   --z-header: 1000;
   --z-backdrop: 1100;
@@ -57,15 +60,15 @@ html.dark {
 
 /* Sidebar Container */
 #sidebar {
+  width: var(--sidebar-width-expanded);
+  height: 100dvh !important;
+  max-height: 100dvh !important;
   position: fixed !important;
-  left: -260px;
-  top: 0;
-  bottom: 0;
-  width: 260px;
-  z-index: 9999 !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 12000 !important; /* Above header */
   /* Ensure sidebar is above everything */
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
   background: var(--sidebar-bg, #ffffff) !important;
@@ -79,6 +82,77 @@ html.dark {
 #sidebar.open {
   left: 0 !important;
 }
+
+/* Global Mini Sidebar overriding for Desktop */
+@media (min-width: 1025px) {
+  /* Brand logo is restored by default now in the header */
+
+  body:not(.heatmap-layout) #app:not(.heatmap-page) ~ #sidebar,
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar) {
+    left: 0 !important;
+    top: 0 !important;
+    width: var(--sidebar-width-collapsed) !important;
+    transition: width 0.2s ease;
+  }
+
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):hover {
+    width: var(--sidebar-width-expanded) !important; /* Expand on hover */
+  }
+  
+  /* Hide labels, brand text when collapsed */
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .brand-text,
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .sidebar-menu a span:not(.menu-icon),
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .sidebar-menu .menu-group .menu-header span:not(.menu-icon),
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .sidebar-menu .menu-group .menu-chevron,
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .sidebar-bottom,
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .sidebar-close {
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    overflow: hidden;
+    display: none !important;
+  }
+
+  /* Force menu groups to deflate when sidebar is deflated */
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .menu-children {
+    max-height: 0 !important;
+    padding-bottom: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Anchor icons to the left even when deflated */
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .sidebar-menu a,
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .menu-header {
+    justify-content: flex-start !important;
+    padding-left: 12px !important; /* (72px width - 40px bg - 8px margins) / 2 + margin = 16px total offset */
+    margin-left: 4px !important;
+    margin-right: 4px !important;
+  }
+
+  
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .sidebar-menu a {
+    /* Padding is handled above to ensure left alignment */
+  }
+  
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .menu-icon {
+    margin: 0 !important;
+  }
+
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):hover .sidebar-backdrop {
+    display: none !important;
+  }
+
+  /* When collapsed, highlight the header if a child is active */
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .menu-group.child-active .menu-header {
+    background: var(--sidebar-active) !important;
+    color: white !important;
+    border-radius: 8px;
+    margin: 0 4px;
+    width: auto;
+    justify-content: center;
+  }
+}
+
 
 #sidebar::-webkit-scrollbar {
   width: 4px;
@@ -102,9 +176,12 @@ html.dark {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  padding: 20px !important;
+  padding: 0 20px !important;
+  height: var(--sidebar-brand-height) !important;
+  min-height: var(--sidebar-brand-height) !important;
   background: var(--sidebar-brand-bg, #f8fafc) !important;
-  border-bottom: 1px solid var(--sidebar-border, #e5e7eb) !important;
+  border-bottom: none !important;
+  flex-shrink: 0 !important;
 }
 
 .brand-logo {
@@ -211,18 +288,41 @@ html.dark {
 
 /* Sidebar Menu */
 .sidebar-menu {
-  flex: 1 !important;
-  padding: 12px !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  padding: 8px 8px 120px 8px !important; /* Added 120px bottom padding to prevent overlap with footer */
   display: flex !important;
   flex-direction: column !important;
-  gap: 4px !important;
+  gap: 2px !important; /* Reduced from 4px */
+  overflow-y: auto !important; /* BACK TO AUTO */
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.4) transparent !important;
+}
+
+.sidebar-menu::-webkit-scrollbar {
+  width: 6px !important;
+  display: block !important;
+}
+
+.sidebar-menu::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  border-radius: 20px !important;
+}
+
+html.dark .sidebar-menu::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.25) !important;
 }
 
 .sidebar-menu a {
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
-  padding: 12px 16px !important;
+  padding: 10px 12px !important; 
   color: var(--sidebar-text, #1f2937) !important;
   text-decoration: none !important;
   font-size: 14px !important;
@@ -260,15 +360,29 @@ html.dark {
 .menu-icon {
   font-size: 16px !important;
   width: 20px !important;
+  height: 20px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   text-align: center !important;
   flex-shrink: 0 !important;
 }
 
+.menu-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.menu-children {
+  max-height: 2000px !important;
+}
+
 /* Sidebar Bottom */
 .sidebar-bottom {
-  padding: 16px 20px !important;
+  padding: 8px 12px !important;
   background: var(--sidebar-footer-bg, #f8fafc) !important;
   border-top: 1px solid var(--sidebar-border, #e5e7eb) !important;
+  flex-shrink: 0 !important;
 }
 
 /* Theme Toggle */
@@ -286,9 +400,32 @@ html.dark {
   transition: all 0.2s ease;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover, .role-switcher:hover {
   background: var(--sidebar-hover);
   transform: scale(1.02);
+}
+
+.role-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 12px;
+  pointer-events: auto;
+  transition: all 0.2s ease;
+}
+
+.role-switcher-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sidebar-text);
 }
 
 .theme-toggle-label {
@@ -418,7 +555,7 @@ html.dark .theme-toggle:hover {
   color: var(--sidebar-text) !important;
 }
 
-html.dark .theme-toggle-label {
+html.dark .theme-toggle-label, html.dark .role-switcher-label {
   color: var(--sidebar-text) !important;
 }
 
@@ -471,3 +608,142 @@ html.dark .logout-link:hover {
 .retry-btn:hover {
   opacity: 0.9;
 }
+
+/* Submenu Group Styles */
+.menu-group {
+  margin: 4px 0;
+  border-radius: 8px;
+  overflow: visible !important; /* Changed to visible to allow pushing */
+  transition: background-color 0.2s ease;
+  height: auto !important;
+}
+
+/* Header for the group (Analysis, etc.) */
+.menu-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 16px !important; /* Reduced vertical from 12px */
+  color: var(--sidebar-text, #1f2937) !important;
+  cursor: pointer !important;
+  user-select: none;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.menu-header:hover, .menu-header.child-active {
+  background: var(--sidebar-hover, #f3f4f6) !important;
+}
+
+.menu-header.child-active {
+  color: var(--sidebar-active, #3b82f6) !important;
+}
+
+.menu-header.no-anim {
+  transition: none !important;
+  transform: none !important;
+}
+
+.menu-header.no-anim:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.menu-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.menu-chevron {
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+/* Children container */
+.menu-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Expanded State */
+.menu-group.expanded .menu-chevron {
+  transform: rotate(180deg);
+}
+
+.menu-group.expanded .menu-children {
+  max-height: 2000px !important;
+  padding-bottom: 12px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.menu-group:not(.expanded) .menu-children {
+  max-height: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* Child Links */
+.menu-children a {
+  padding: 8px 16px 8px 48px !important;
+  /* Indented more */
+  font-size: 13px !important;
+  opacity: 0.9;
+}
+
+.menu-children a:hover {
+  opacity: 1;
+}
+/* Restore brand-logo as a hamburger menu when deflated */
+@media (min-width: 1025px) {
+  /* Hide the actual image when deflated */
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .brand-logo img {
+    opacity: 0 !important;
+  }
+  
+  /* Inject a hamburger menu instead */
+  body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .brand-logo::before {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    left: 24px;
+    top: 16px;
+    background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    z-index: 10;
+  }
+  
+  /* White hamburger for dark mode */
+  html.dark body:not(.heatmap-layout) #sidebar:not(.heatmap-sidebar):not(:hover) .brand-logo::before {
+    background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="%23ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>');
+  }
+}
+
+/* Ensure brand text is vertically centered since subtitle is gone */
+.sidebar-brand .brand-text {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+/* Close button logic */
+.sidebar-close {
+  display: none !important;
+}
+
+body.page-file-complaint .sidebar-close, body.page-digos-map .sidebar-close {
+  display: flex !important;
+}
+

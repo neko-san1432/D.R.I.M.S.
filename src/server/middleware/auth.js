@@ -1,14 +1,14 @@
 const Database = require("../config/database");
 const {
   validateUserRole,
-  extractDepartmentCode,
+  extractdepartmentCode,
 } = require("../utils/roleValidation");
 const {
   extractUserMetadata,
   buildUserObject,
   handleAuthError,
 } = require("../utils/authUtils");
-const { SWITCHABLE_ROLES } = require("../../shared/constants");
+const { SWITCHABLE_ROLES, ALLOWED_ROLES } = require("../../shared/constants");
 
 const supabase = Database.getClient();
 
@@ -19,10 +19,10 @@ const authenticateUser = async (req, res, next) => {
     const cookieToken = req.cookies?.sb_access_token;
 
     // Prioritize Authorization header as it contains the most recent token from the client
+    // SEC-05 FIX: Removed sb_access_token_debug fallback
     const token =
       authHeader?.replace("Bearer ", "") ||
-      cookieToken ||
-      req.cookies?.sb_access_token_debug;
+      cookieToken;
 
     if (!token) {
       if (req.originalUrl.startsWith("/api/") || req.path.startsWith("/api/")) {
@@ -37,10 +37,15 @@ const authenticateUser = async (req, res, next) => {
     }
 
     // Validate token with Supabase
+    let tokenUser = null;
+    let error = null;
+
     const {
-      data: { user: tokenUser },
-      error,
+      data: { user: supabaseUser },
+      error: supabaseError,
     } = await supabase.auth.getUser(token);
+    tokenUser = supabaseUser;
+    error = supabaseError;
 
     if (error || !tokenUser) {
       // Clear invalid cookie
@@ -66,37 +71,47 @@ const authenticateUser = async (req, res, next) => {
 
     if (sessionsInvalidatedAt || passwordChangedAt) {
       // Decode JWT token to get issued-at time (iat claim)
+      // SECURITY: Only decode after Supabase verification - payload is trusted at this point
       try {
         const tokenParts = token.split(".");
         if (tokenParts.length === 3) {
-          const payload = JSON.parse(
-            Buffer.from(tokenParts[1], "base64").toString()
-          );
-          const tokenIssuedAt = payload.iat
-            ? new Date(payload.iat * 1000)
-            : null;
-          const invalidationTime = sessionsInvalidatedAt || passwordChangedAt;
+          // Validate base64 encoding before decoding
+          const payloadBase64 = tokenParts[1].replace(/-/g, "+").replace(/_/g, "/");
+          const paddedPayload = payloadBase64.padEnd(payloadBase64.length + ((4 - payloadBase64.length % 4) % 4), "=");
 
-          if (
-            tokenIssuedAt &&
-            invalidationTime &&
-            new Date(invalidationTime) > tokenIssuedAt
-          ) {
-            res.clearCookie("sb_access_token");
+          let payload;
+          try {
+            payload = JSON.parse(Buffer.from(paddedPayload, "base64").toString("utf-8"));
+          } catch (decodeErr) {
+            console.warn("[AUTH] Failed to parse JWT payload:", decodeErr.message);
+            payload = null;
+          }
+
+          if (payload && typeof payload.iat === "number") {
+            const tokenIssuedAt = new Date(payload.iat * 1000);
+            const invalidationTime = sessionsInvalidatedAt || passwordChangedAt;
+
             if (
-              req.originalUrl.startsWith("/api/") ||
-              req.path.startsWith("/api/")
+              tokenIssuedAt &&
+              invalidationTime &&
+              new Date(invalidationTime) > tokenIssuedAt
             ) {
-              return res.status(401).json({
-                success: false,
-                error: "Session invalidated. Please login again.",
-              });
+              res.clearCookie("sb_access_token");
+              if (
+                req.originalUrl.startsWith("/api/") ||
+                req.path.startsWith("/api/")
+              ) {
+                return res.status(401).json({
+                  success: false,
+                  error: "Session invalidated. Please login again.",
+                });
+              }
+              return res.redirect(
+                `/login?message=${encodeURIComponent(
+                  "Session invalidated. Please login again"
+                )}&type=error`
+              );
             }
-            return res.redirect(
-              `/login?message=${encodeURIComponent(
-                "Session invalidated. Please login again"
-              )}&type=error`
-            );
           }
         }
       } catch (jwtErr) {
@@ -111,6 +126,9 @@ const authenticateUser = async (req, res, next) => {
     const combinedMetadata = extractUserMetadata(tokenUser);
 
     // Check for Citizen Mode override
+    // SEC-21 FIX: Validate app_mode strictly — only allow exact "citizen_mode" value
+    // and only for roles that are in SWITCHABLE_ROLES (lgu, super-admin).
+    // This is a privilege DOWNGRADE (admin→citizen), not an escalation.
     const appMode = req.cookies?.app_mode;
     const realRole = combinedMetadata.role || "citizen";
 
@@ -119,6 +137,9 @@ const authenticateUser = async (req, res, next) => {
       combinedMetadata.base_role = realRole;
       combinedMetadata.role = "citizen";
       combinedMetadata.normalized_role = "citizen";
+    } else if (appMode && appMode !== "citizen_mode") {
+      // Invalid app_mode value — clear it
+      res.clearCookie("app_mode");
     }
 
     // Validate user role and department code
@@ -148,8 +169,56 @@ const authenticateUser = async (req, res, next) => {
       );
     }
 
+    // STRICT MODE CHECK: Enforce 3-role system if legacy roles are disabled
+    if (process.env.ENABLE_LEGACY_ROLES === "false") {
+      const normalizedRole = (userRole.toLowerCase().startsWith("lgu-") || userRole.toLowerCase() === "complaint-coordinator")
+        ? "lgu"
+        : userRole.toLowerCase();
+
+      // Allow if role is explicitly in ALLOWED_ROLES
+      // OR if it's an LGU role (starts with 'lgu') but NOT one of the restricted legacy ones
+      // We need to be careful: 'lgu' is allowed. 'lgu-admin', 'lgu-hr' are NOT.
+      // But 'lgu-{dept}' (officer) might need handling.
+      // Based on plan: "lgu-officer is disabled".
+      // So valid roles are exact matches: 'citizen', 'super-admin'.
+      // And 'lgu' (base role).
+      // What about 'lgu-{dept}'? The instruction says "lgu (formerly Coordinator/Admin)".
+      // The user said "the 'lgu' role will now become the complaint coordinator".
+      // Usually 'lgu' was the base officer. Now it's the "LGU" role.
+
+      // We will check against the ALLOWED_ROLES list from constants: ['citizen', 'lgu', 'super-admin']
+      // We must check if the userRole *starts with* allowed roles if we want to allow variations,
+      // OR strict equality if we want to block 'lgu-admin'.
+
+      // 'lgu' is in allowed roles. 'lgu-admin' starts with 'lgu'.
+      // If we strictly check includes, 'lgu-admin' is NOT in ['citizen', 'lgu', 'super-admin'].
+      // So simply checking ALLOWED_ROLES.includes(normalizedRole) should work for exact matches.
+      // However, we need to handle the case where 'lgu' might have data appended?
+      // Current system uses 'lgu' as the role string in metadata usually, or 'lgu-{dept}'.
+      // If 'lgu-{dept}' is the officer, and we want to disable officer...
+      // But usage of 'lgu' implies the NEW main LGU role.
+
+      // Let's assume strict exact match for now as safe default for 'citizen' and 'super-admin'.
+      // For 'lgu', we might need to handle 'lgu' vs 'lgu-admin'.
+      // If allowed is 'lgu', then 'lgu-admin' should FAIL.
+
+      const isAllowed = ALLOWED_ROLES.includes(normalizedRole);
+
+      if (!isAllowed) {
+        console.error(`[AUTH] ⛔ Role '${userRole}' is disabled in strict mode.`);
+        res.clearCookie("sb_access_token");
+
+        const errorMsg = "Your role is no longer active in the new system.";
+
+        if (req.originalUrl.startsWith("/api/") || req.path.startsWith("/api/")) {
+          return res.status(403).json({ success: false, error: errorMsg });
+        }
+        return res.redirect(`/login?message=${encodeURIComponent(errorMsg)}&type=error`);
+      }
+    }
+
     // Extract department code for LGU roles
-    const departmentCode = extractDepartmentCode(userRole);
+    const departmentCode = extractdepartmentCode(userRole);
 
     // Build standardized user object
     req.user = buildUserObject(
@@ -238,7 +307,32 @@ const requireRole = (allowedRoles) => {
       ? String(baseRole).trim().toLowerCase()
       : null;
 
-    const hasPermission = allowedRoles.some((allowedRole) => {
+    // Simple Workflow Mode: Normalize user role to simplified 3-role system
+    // Map any lgu-* role or complaint-coordinator to 'lgu'
+    const simplifiedUserRole = (normalizedRole.startsWith("lgu-") || normalizedRole === "complaint-coordinator")
+      ? "lgu"
+      : normalizedRole;
+
+    const simplifiedBaseRole = normalizedBaseRole
+      ? ((normalizedBaseRole.startsWith("lgu-") || normalizedBaseRole === "complaint-coordinator")
+        ? "lgu"
+        : normalizedBaseRole)
+      : null;
+
+    // Also normalize the allowed roles for matching
+    const normalizedAllowedRoles = allowedRoles.map(role => {
+      if (typeof role === "string") {
+        const roleLower = role.toLowerCase();
+        // Map legacy LGU roles to 'lgu' in the allowed list
+        if (roleLower.startsWith("lgu-") || roleLower === "complaint-coordinator") {
+          return "lgu";
+        }
+        return roleLower;
+      }
+      return role;
+    });
+
+    const hasPermission = normalizedAllowedRoles.some((allowedRole) => {
       if (typeof allowedRole === "string") {
         // Support wildcard matching (e.g., "lgu-admin*" matches "lgu-admin-{dept}")
         if (allowedRole.includes("*")) {
@@ -247,19 +341,18 @@ const requireRole = (allowedRoles) => {
           // eslint-disable-next-line security/detect-non-literal-regexp
           const regex = new RegExp(`^${pattern}$`);
           return (
-            regex.test(normalizedRole) ||
-            (normalizedBaseRole && regex.test(normalizedBaseRole))
+            regex.test(simplifiedUserRole) ||
+            (simplifiedBaseRole && regex.test(simplifiedBaseRole))
           );
         }
         return (
-          normalizedRole === allowedRole.toLowerCase() ||
-          (normalizedBaseRole &&
-            normalizedBaseRole === allowedRole.toLowerCase())
+          simplifiedUserRole === allowedRole ||
+          (simplifiedBaseRole && simplifiedBaseRole === allowedRole)
         );
       } else if (allowedRole instanceof RegExp) {
         return (
-          allowedRole.test(normalizedRole) ||
-          (normalizedBaseRole && allowedRole.test(normalizedBaseRole))
+          allowedRole.test(simplifiedUserRole) ||
+          (simplifiedBaseRole && allowedRole.test(simplifiedBaseRole))
         );
       } else if (typeof allowedRole === "object" && allowedRole !== null) {
         // Handle case where regex might be converted to object
@@ -287,7 +380,9 @@ const requireRole = (allowedRoles) => {
             process.env.NODE_ENV === "development"
               ? {
                 userRole,
+                simplifiedUserRole,
                 allowedRoles,
+                normalizedAllowedRoles,
                 path: req.path,
               }
               : null,

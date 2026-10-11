@@ -8,19 +8,9 @@ const captchaRoutes = require("./captchaRoutes");
 const coordinatorRoutes = require("./coordinatorRoutes");
 const ocrRoutes = require("./ocrRoutes");
 const verificationRoutes = require("./verificationRoutes");
-const { _apiLimiter } = require("../middleware/rateLimiting");
-
-let hrRoutes;
-try {
-  hrRoutes = require("./hrRoutes");
-  // console.log removed for security
-} catch (error) {
-  console.error("[ROUTES] Error loading HR routes:", error);
-  throw error;
-}
+const { apiLimiter } = require("../middleware/rateLimiting");
 const superAdminRoutes = require("./superAdminRoutes");
-const lguAdminRoutes = require("./lguAdminRoutes");
-const lguRoutes = require("./lguOfficerRoutes"); // LGU officer routes (using lguOfficerRoutes file)
+const lguRoutes = require("./lguRoutes");
 const notificationRoutes = require("./notificationRoutes");
 const storageRoutes = require("./storageRoutes");
 const contentRoutes = require("./contentRoutes");
@@ -31,6 +21,7 @@ const complianceRoutes = require("./complianceRoutes");
 const officeConfirmationRoutes = require("./officeConfirmationRoutes");
 const publicApiRoutes = require("./publicApiRoutes");
 const brainDashboardRoutes = require("./brainDashboardRoutes");
+
 
 const router = express.Router();
 // CAPTCHA routes
@@ -46,10 +37,9 @@ router.use("/settings", settingRoutes);
 router.use("/coordinator", coordinatorRoutes);
 router.use("/identity", ocrRoutes);
 router.use("/verification", verificationRoutes);
-router.use("/hr", hrRoutes);
 router.use("/superadmin", superAdminRoutes);
-router.use("/lgu-admin", lguAdminRoutes);
-router.use("/lgu", lguRoutes); // LGU officer routes (lgu-wst, lgu-engineering, etc.)
+router.use("/lgu", lguRoutes);
+router.use("/lgu-admin", lguRoutes); // Backward compatibility
 router.use("/notifications", notificationRoutes);
 router.use("/storage", storageRoutes);
 router.use("/content", contentRoutes);
@@ -61,8 +51,25 @@ router.use("/office-confirmation", officeConfirmationRoutes);
 // NLP Routes
 router.use("/nlp", require("./nlpRoutes"));
 router.use("/brain", brainDashboardRoutes);
+// Public config route (formerly in publicApiRoutes, moved here for correct path /api/config)
+router.get("/config", apiLimiter, (req, res) => {
+  const config = require("../../../config/app");
+  const devAccounts = require("../../../config/devAccounts");
+  
+  res.json({
+    legacyRolesEnabled: process.env.ENABLE_LEGACY_ROLES === "true",
+    legacyRoleManagementEnabled: process.env.ENABLE_LEGACY_ROLES === "true",
+    testLoginEnabled: config.env === "development" || process.env.ENABLE_TEST_LOGIN === "true",
+    testAccounts: {
+      citizen: devAccounts.citizen,
+      lgu: devAccounts.lgu,
+      superAdmin: devAccounts.superAdmin
+    }
+  });
+});
+
 // Public API routes (boundaries, geocoding)
-router.use("/", publicApiRoutes);
+router.use("/public", publicApiRoutes);
 // User routes (roles, profile info)
 router.use("/user", require("./userRoutes"));
 

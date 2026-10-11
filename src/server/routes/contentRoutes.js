@@ -1,8 +1,12 @@
 const express = require("express");
 const Database = require("../config/database");
 const { authenticateUser, requireRole } = require("../middleware/auth");
+const { csrfProtection } = require("../middleware/csrf");
 
 const router = express.Router();
+
+// SEC-16 FIX: CSRF protection on all state-changing routes
+router.use(csrfProtection);
 // ============================================================================
 // NEWS ROUTES
 // ============================================================================
@@ -66,7 +70,7 @@ router.get("/news/:id", async (req, res) => {
   }
 });
 // POST /api/content/news - Create news (admin only)
-router.post("/news", authenticateUser, requireRole(["lgu-admin"]), async (req, res) => {
+router.post("/news", authenticateUser, requireRole(["lgu"]), async (req, res) => {
   try {
     const { title, content, excerpt, image_url, category, tags, status } = req.body;
     if (!title || !content) {
@@ -88,7 +92,8 @@ router.post("/news", authenticateUser, requireRole(["lgu-admin"]), async (req, r
       author_id: req.user?.id
     };
     // console.log removed for security
-    const dbClient = Database.getClient();
+    // Use service client to bypass RLS for admin-generated content
+    const dbClient = Database.getServiceClient();
     const { data, error } = await dbClient
       .from("news")
       .insert([newsData])
@@ -193,7 +198,7 @@ router.get("/events/:id", async (req, res) => {
   }
 });
 // POST /api/content/events - Create event (admin only)
-router.post("/events", authenticateUser, requireRole(["lgu-admin"]), async (req, res) => {
+router.post("/events", authenticateUser, requireRole(["lgu"]), async (req, res) => {
   try {
     const {
       title,
@@ -231,7 +236,8 @@ router.post("/events", authenticateUser, requireRole(["lgu-admin"]), async (req,
       created_by: req.user?.id
     };
     // console.log removed for security
-    const dbClient = Database.getClient();
+    // Use service client to bypass RLS for admin-generated content
+    const dbClient = Database.getServiceClient();
     const { data, error } = await dbClient
       .from("events")
       .insert([eventData])
@@ -328,7 +334,7 @@ router.get("/notices/:id", async (req, res) => {
   }
 });
 // POST /api/content/notices - Create notice (admin only)
-router.post("/notices", authenticateUser, requireRole(["lgu-admin"]), async (req, res) => {
+router.post("/notices", authenticateUser, requireRole(["lgu"]), async (req, res) => {
   try {
     const {
       title,
@@ -360,7 +366,8 @@ router.post("/notices", authenticateUser, requireRole(["lgu-admin"]), async (req
       created_by: req.user?.id
     };
     // console.log removed for security
-    const dbClient = Database.getClient();
+    // Use service client to bypass RLS for admin-generated content
+    const dbClient = Database.getServiceClient();
     const { data, error } = await dbClient
       .from("notices")
       .insert([noticeData])
@@ -386,7 +393,7 @@ router.post("/notices", authenticateUser, requireRole(["lgu-admin"]), async (req
       return res.status(500).json({
         success: false,
         error: "Failed to create notice",
-        details: `Insert operation returned no data. Verification query: ${  verifyError ? verifyError.message : "No matching record found"}`
+        details: `Insert operation returned no data. Verification query: ${verifyError ? verifyError.message : "No matching record found"}`
       });
     }
     const insertedNotice = data[0];

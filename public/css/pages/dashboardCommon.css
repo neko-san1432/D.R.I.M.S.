@@ -1,0 +1,299 @@
+/* Common Dashboard Styles - Viewport Optimized */
+
+/* 
+ * CLEANED: Widget styles removed. 
+ * Keeping only layout essentials for compatibility.
+ */
+
+/* Viewport Height Optimization - Natural Flow */
+.citizen-dashboard,
+.coordinator-dashboard,
+.lgu-admin-dashboard,
+.superadmin-dashboard {
+  min-height: auto;
+  overflow-y: visible;
+  box-sizing: border-box;
+  padding: 0 3%;
+  margin: 0;
+  padding-bottom: 2rem;
+  padding-top: 0 !important;
+  /* Removed top padding to prevent gap above fixed header */
+}
+
+/* Reduce top padding for role dashboards that appeared too spaced */
+.lgu-dashboard .dashboard-header,
+.superadmin-dashboard .dashboard-header {
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.dashboard-grid {
+  box-sizing: border-box;
+}
+
+/* Themed page scrollbar for dashboard pages */
+html,
+body {
+  scrollbar-width: thin;
+}
+
+html:not(.dark),
+html:not(.dark) body {
+  scrollbar-color: #94a3b8 #e2e8f0;
+}
+
+html:not(.dark)::-webkit-scrollbar,
+html:not(.dark) body::-webkit-scrollbar {
+  width: 10px;
+}
+
+html:not(.dark)::-webkit-scrollbar-track,
+html:not(.dark) body::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+html:not(.dark)::-webkit-scrollbar-thumb,
+html:not(.dark) body::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
+  border: 2px solid #e2e8f0;
+}
+
+html:not(.dark)::-webkit-scrollbar-thumb:hover,
+html:not(.dark) body::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+html.dark,
+html.dark body {
+  scrollbar-color: #475569 #1e293b;
+}
+
+html.dark::-webkit-scrollbar,
+html.dark body::-webkit-scrollbar {
+  width: 10px;
+}
+
+html.dark::-webkit-scrollbar-track,
+html.dark body::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+html.dark::-webkit-scrollbar-thumb,
+html.dark body::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 999px;
+  border: 2px solid #1e293b;
+}
+
+html.dark::-webkit-scrollbar-thumb:hover,
+html.dark body::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Scrollbar Styling - useful globally */
+.dashboard-grid::-webkit-scrollbar,
+.content-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-grid::-webkit-scrollbar-track,
+.content-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.dashboard-grid::-webkit-scrollbar-thumb,
+.content-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+html.dark .dashboard-grid::-webkit-scrollbar-track,
+html.dark .content-container::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+html.dark .dashboard-grid::-webkit-scrollbar-thumb,
+html.dark .content-container::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+html.dark .dashboard-grid::-webkit-scrollbar-thumb:hover,
+html.dark .content-container::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Dark Mode Overrides for Dashboards */
+
+/* Dark Mode Overrides for Dashboards */
+html.dark .citizen-dashboard .bg-white,
+html.dark .coordinator-dashboard .bg-white,
+html.dark .lgu-admin-dashboard .bg-white,
+html.dark .superadmin-dashboard .bg-white,
+html.dark .dashboard-content .bg-white,
+html.dark .stat-card.bg-white {
+  background-color: var(--gray-100) !important;
+  border-color: var(--gray-200) !important;
+  color: var(--gray-900);
+}
+
+/* Adjust hover states for lists in dark mode */
+html.dark .hover\:bg-gray-50:hover {
+  background-color: var(--gray-200) !important;
+  border-color: var(--gray-300) !important;
+}
+
+html.dark .bg-gray-50 {
+  background-color: var(--gray-50) !important;
+  /* Body bg is gray-50 */
+  border-color: var(--gray-200) !important;
+}
+
+/* HTML Dark Mode handles text color inversion automatically via variables (gray-800 becomes light)
+   So we DO NOT override text classes here which was breaking contrast */
+
+/* Chart Canvas Fix for Dark Mode */
+/* Using a filter to invert charts is a robust quick fix if JS reloading isn't available */
+html.dark canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+html.dark .complaint-item {
+  border-color: var(--gray-200);
+}
+
+/* Custom Responsive Grid Utilities - mimicking Tailwind */
+@media (min-width: 768px) {
+  .md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .md\:col-span-2 {
+    grid-column: span 2 / span 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lg\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lg\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .lg\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .lg\:col-span-2 {
+    grid-column: span 2 / span 2;
+  }
+
+  .lg\:col-span-3 {
+    grid-column: span 3 / span 3;
+  }
+}
+
+/* =========================================
+   COMPACT MODE OVERRIDES (Consolidated)
+   ========================================= */
+/* Dashboard specific adjustments */
+#app.citizen-dashboard,
+#app.coordinator-dashboard,
+#app.superadmin-dashboard,
+#app {
+  flex: 1;
+  overflow: hidden;
+  /* Let the inner wrapper scroll */
+  padding: 0 !important;
+  /* Remove padding from outer app to let header touch edges */
+  height: 100vh;
+}
+
+#app.citizen-dashboard .header-container,
+#app.coordinator-dashboard .header-container,
+#app.superadmin-dashboard .header-container,
+#app .header-container {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+#app.citizen-dashboard .dashboard-main-wrapper,
+#app.coordinator-dashboard .dashboard-main-wrapper,
+#app.superadmin-dashboard .dashboard-main-wrapper,
+#app .dashboard-main-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-6) var(--space-6);
+  /* Reduced top padding to fix header gap */
+}
+
+/* Compact specific sections */
+.dashboard-content {
+  gap: 0.75rem !important;
+  /* Reduce gap-6 (1.5rem) to 0.75rem */
+  padding: 0.5rem !important;
+}
+
+/* Reduce size of stats cards */
+.stat-card {
+  padding: 0.75rem !important;
+}
+
+.stat-card h3 {
+  font-size: 1.25rem !important;
+  /* Reduce 2xl */
+}
+
+/* Recent Activity List - Scroll internally */
+#recent-activity-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Recent Status Updates: prevent text/status overlap */
+.recent-update-item {
+  align-items: flex-start;
+}
+
+.recent-update-body {
+  min-width: 0;
+}
+
+.recent-update-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-update-status {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .recent-update-item {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .recent-update-status-wrap {
+    width: 100%;
+  }
+
+  .recent-update-title {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+@media (max-width: 640px) {
+  /* On small screens, let the list breathe instead of forcing a tiny internal scroll area. */
+  #recent-activity-list {
+    max-height: none;
+  }
+}

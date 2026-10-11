@@ -1,0 +1,199 @@
+/* ============================================================================
+   ENHANCED FORM COMPONENTS
+   ============================================================================ */
+
+/* Form Control - Premium Glassmorphism */
+.form-control,
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  color: var(--text-color);
+  background-color: var(--bg-surface);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all var(--transition-normal);
+  box-sizing: border-box;
+  box-shadow: var(--shadow-sm);
+}
+
+html.dark .form-control,
+html.dark .input,
+html.dark .select,
+html.dark .textarea {
+  background-color: rgba(30, 41, 59, 0.7);
+  border-color: var(--gray-700);
+}
+
+.form-control:hover {
+  border-color: var(--gray-400);
+  background-color: var(--bg-surface-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.form-control:focus {
+  outline: none;
+  background-color: var(--bg-surface);
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15), var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.form-control:disabled {
+  background-color: var(--gray-100);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  backdrop-filter: none;
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* Validation States */
+.form-control:invalid:not(:focus):not(:placeholder-shown) {
+  border-color: var(--error-300);
+  background-color: var(--error-50);
+}
+
+/* Form Group */
+.form-group {
+  margin-bottom: var(--space-6);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Label */
+label,
+.form-label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+  user-select: none;
+}
+
+.form-label-required::after {
+  content: " *";
+  color: var(--error-500);
+}
+
+/* Select */
+select.form-control {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  background-size: 20px;
+  padding-right: var(--space-10);
+}
+
+/* Textarea */
+textarea.form-control {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Checkbox & Radio */
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  cursor: pointer;
+  user-select: none;
+}
+
+.form-check input[type="checkbox"],
+.form-check input[type="radio"] {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-sm);
+  flex-shrink: 0;
+  background-color: var(--bg-surface);
+}
+
+.form-check input[type="radio"] {
+  border-radius: 50%;
+}
+
+.form-check input[type="checkbox"]:checked,
+.form-check input[type="radio"]:checked {
+  background-color: var(--primary-600);
+  border-color: var(--primary-600);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 11-1.06-1.06l7.25-7.25a.75.75 0 011.06 0z'/%3E%3Cpath d='M2.22 7.78a.75.75 0 011.06 0L6 10.44l7.22-7.22a.75.75 0 111.06 1.06L6 12.56 3.28 9.84a.75.75 0 010-1.06z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.form-check label {
+  margin: 0;
+  font-weight: var(--font-weight-normal);
+  color: var(--text-color);
+}
+
+/* Help Text */
+.form-text {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* Switch Component */
+.form-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch {
+  width: 48px;
+  height: 28px;
+  background-color: var(--gray-300);
+  border-radius: var(--radius-full);
+  position: relative;
+  transition: background-color var(--transition-sm);
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background-color: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: left var(--transition-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+input[type="checkbox"]:checked + .switch {
+  background-color: var(--primary-600);
+}
+
+input[type="checkbox"]:checked + .switch::after {
+  left: 22px;
+}

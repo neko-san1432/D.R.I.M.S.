@@ -1,6 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const { authenticateUser } = require("../middleware/auth");
+const { csrfProtection } = require("../middleware/csrf");
+
+// SEC-16 FIX: CSRF protection on all state-changing routes
+router.use(csrfProtection);
 
 /**
  * @route   GET /api/user/role
@@ -65,7 +69,7 @@ router.get("/role-info", authenticateUser, (req, res) => {
  */
 router.post("/switch-role", authenticateUser, async (req, res) => {
   try {
-    const RoleManagementService = require("../services/RoleManagementService");
+    const RoleManagementService = require("../services/user/RoleManagementService");
     const roleService = new RoleManagementService();
 
     // Check if user is allowed to switch
@@ -87,7 +91,7 @@ router.post("/switch-role", authenticateUser, async (req, res) => {
       });
     }
 
-    const targetRole = req.body.targetRole;
+    const {targetRole} = req.body;
     const isCitizenMode = targetRole === "citizen";
 
     // Set cookie options

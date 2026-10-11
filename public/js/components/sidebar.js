@@ -102,30 +102,32 @@ function initializeSidebarClose() {
 // Icon mapping now uses SVG icons from icons.js utility
 async function setSidebarRole() {
   try {
-    // console.log removed for security
-    // Get user role with better error handling
-    let role = null;
-    try {
-      role = await getUserRole({ refresh: true });
-      // console.log removed for security
-    } catch (error) {
-      console.error("Failed to get user role:", error);
-      // Try to get role from session as fallback
+    const overrideRole = localStorage.getItem("cl_role_override");
+    const isCitizenMode = Boolean(document.cookie.match(/(^|;)\s*app_mode=citizen_mode/));
+
+    let role = overrideRole || (isCitizenMode ? "citizen" : null);
+
+    if (!role) {
       try {
-        const { supabase } = await import("../config/config.js");
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        // console.log removed for security
-        if (session?.user) {
-          const metadata =
-            session.user.raw_user_meta_data || session.user.user_metadata || {};
-          // console.log removed for security
-          role = metadata.role || metadata.normalized_role;
-          // console.log removed for security
+        role = await getUserRole({ refresh: true });
+      } catch (error) {
+        console.error("Failed to get user role:", error);
+      }
+
+      // Try to get role from session as fallback
+      if (!role) {
+        try {
+          const { supabase } = await import("../config/config.js");
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session?.user) {
+            const metadata = session.user.user_metadata || {};
+            role = metadata.role || metadata.normalized_role;
+          }
+        } catch (sessionError) {
+          console.error("Failed to get role from session:", sessionError);
         }
-      } catch (sessionError) {
-        console.error("Failed to get role from session:", sessionError);
       }
     }
     // If still no role, try to get it from localStorage
@@ -157,30 +159,58 @@ async function setSidebarRole() {
 <div class="sidebar-brand">
   <div class="brand-logo">
     <img src="${brandConfig.logo.imageUrl}" alt="${brandConfig.name
-        } Logo" class="brand-icon" style="width: 32px; height: 32px; object-fit: contain;">
+} Logo" class="brand-icon" style="width: 32px; height: 32px; object-fit: contain;">
     <div class="brand-text">
-      <a href="${brandConfig.dashboardUrl}" class="brand-link">${brandConfig.name
-        }</a>
-      <div class="brand-subtitle">Citizen Link</div>
+      <a href="${brandConfig.dashboardUrl}" class="brand-link">${brandConfig.name} <span style="font-size: 8px; opacity: 0.5;">v2.4.5</span></a>
     </div>
   </div>
   <button id="sidebar-close" class="sidebar-close" aria-label="Close sidebar">×</button>
 </div>
-        
+
 <div class="sidebar-menu">
           ${menuItems
-          .map(
-            (item) => `
+    .map((item) => {
+      if (item.children) {
+        return `
+              <div class="menu-group">
+                <div class="menu-header no-anim">
+                  <div class="menu-header-content">
+                    <span class="menu-icon">${getMenuIcon(item.icon, {
+    size: 20,
+  })}</span>
+                    <span>${item.label}</span>
+                  </div>
+                  ${getIcon("chevronDown", { className: "menu-chevron", size: 16 })}
+                </div>
+                <div class="menu-children">
+                  ${item.children
+    .map(
+      (child) => `
+                    <a href="${root}${child.url}" data-icon="${child.icon
+}" aria-label="${child.label}">
+                      <span class="menu-icon">${getMenuIcon(child.icon, {
+    size: 18,
+  })}</span>
+                      <span>${child.label}</span>
+                    </a>
+                  `
+    )
+    .join("")}
+                </div>
+              </div>
+            `;
+      }
+      return `
             <a href="${root}${item.url}" data-icon="${item.icon}" aria-label="${item.label
-              }">
+}">
               <span class="menu-icon">${getMenuIcon(item.icon, {
-                size: 20,
-              })}</span>
+    size: 20,
+  })}</span>
               <span>${item.label}</span>
             </a>
-          `
-          )
-          .join("")}
+          `;
+    })
+    .join("")}
 </div>
         
 <div class="sidebar-bottom">
@@ -191,15 +221,18 @@ async function setSidebarRole() {
     </div>
     <div class="toggle-switch" id="toggle-switch"></div>
   </div>
-          <div class="sidebar-footer">
-            <a href="/logout" class="logout-link" data-icon="signout" aria-label="Sign out">
-              <span class="menu-icon">${getMenuIcon("signout", {
-            size: 20,
-          })}</span>
-              <span>Sign Out</span>
-            </a>
-          </div>
-        </div>
+  
+
+
+  <div class="sidebar-footer">
+    <a href="/logout" class="logout-link" data-icon="signout" aria-label="Sign out">
+      <span class="menu-icon">${getMenuIcon("signout", {
+    size: 20,
+  })}</span>
+      <span>Sign Out</span>
+    </a>
+  </div>
+</div>
       `;
 
       // Re-initialize event listeners after HTML update
@@ -208,6 +241,16 @@ async function setSidebarRole() {
       initializeLogout();
       // Update active menu items with aria-current
       setActiveMenuItem();
+
+      // Attach event listeners to expandable menus to replace inline onclick
+      const menuHeaders = _sidebarEl.querySelectorAll(".menu-header");
+      menuHeaders.forEach(header => {
+        header.addEventListener("click", function() {
+          if (this.parentElement) {
+            this.parentElement.classList.toggle("expanded");
+          }
+        });
+      });
 
       // console.log removed for security
     }
@@ -246,31 +289,78 @@ function getMenuItemsForRole(role) {
     );
   }
 
-  // console.log removed for security
+  // Simple Workflow Mode: Only 3 roles supported
   const menuItems = {
     citizen: [
       { url: "/dashboard", icon: "dashboard", label: "Dashboard" },
-      { url: "/fileComplaint", icon: "fileComplaint", label: "File Complaint" },
-      { url: "/digos-map", icon: "heatmap", label: "Digos City Map" },
-      { url: "/departments", icon: "departments", label: "Departments" },
-      { url: "/myProfile", icon: "myProfile", label: "My Profile" },
+      { url: "/filecomplaint", icon: "filecomplaint", label: "File complaint" },
+      { url: "/digos-map", icon: "map", label: "Digos City Map" },
+      {
+        label: "You",
+        icon: "user",
+        children: [
+          { url: "/profile", icon: "user", label: "profile" },
+          { url: "/settings", icon: "settings", label: "settings" },
+        ]
+      },
+    ],
+    lgu: [
+      { url: "/dashboard", icon: "lgu-admin-dashboard", label: "Dashboard" },
+      { url: "/review-queue", icon: "review-queue", label: "Review Queue" },
+
+      { url: "/heatmap", icon: "heatmap", label: "Heatmap" },
+      { url: "/publish", icon: "publication", label: "Public Bulletins" },
+      {
+        label: "Analytics",
+        icon: "analytics",
+        children: [
+          {
+            url: "/brainAnalytics-page?tab=system-training",
+            label: "Training",
+            icon: "brain",
+          },
+          {
+            url: "/brainAnalytics-page?tab=temporal",
+            label: "Temporal",
+            icon: "chart-line",
+          },
+          {
+            url: "/brainAnalytics-page?tab=categories",
+            label: "Categories",
+            icon: "tags",
+          },
+          {
+            url: "/brainAnalytics-page?tab=edge-cases",
+            label: "Smart Detection",
+            icon: "microchip",
+          },
+          {
+            url: "/brainAnalytics-page?tab=data-table",
+            label: "Dataset",
+            icon: "database",
+          },
+        ],
+      },
+      {
+        url: "/dictionary-manager",
+        icon: "dictionary",
+        label: "Dictionary Manager",
+      },
+      {
+        label: "You",
+        icon: "briefcase",
+        children: [
+          { url: "/profile", icon: "user", label: "profile" },
+          { url: "/settings", icon: "settings", label: "settings" },
+        ]
+      },
     ],
     "super-admin": [
-      { url: "/dashboard", icon: "dashboard", label: "Dashboard" },
-      {
-        url: "/super-admin/pending-signups",
-        icon: "review-queue",
-        label: "Pending Signups",
-      },
+      { url: "/dashboard", icon: "super-admin-dashboard", label: "Dashboard" },
       {
         url: "/super-admin/user-manager",
         icon: "role-changer",
         label: "User Manager",
-      },
-      {
-        url: "/super-admin/link-generator",
-        icon: "link-generator",
-        label: "Link Generator",
       },
       {
         url: "/super-admin/server-logs",
@@ -278,79 +368,28 @@ function getMenuItemsForRole(role) {
         label: "Server logs",
       },
       {
-        url: "/brain-analytics-page#dictionary-manager",
-        icon: "analytics",
-        label: "Dictionary Manager",
-      },
-      { url: "/departments", icon: "departments", label: "Departments" },
-      { url: "/myProfile", icon: "myProfile", label: "My Profile" },
-    ],
-    "lgu-hr": [
-      { url: "/dashboard", icon: "dashboard", label: "Dashboard" },
-      {
-        url: "/link-generator",
-        icon: "link-generator",
-        label: "Link Generator",
-      },
-      { url: "/myProfile", icon: "myProfile", label: "My Profile" },
-    ],
-    "complaint-coordinator": [
-      { url: "/dashboard", icon: "dashboard", label: "Dashboard" },
-      { url: "/review-queue", icon: "review-queue", label: "Review Queue" },
-      { url: "/heatmap", icon: "heatmap", label: "Heatmap" },
-      {
-        url: "/brain-analytics-page",
-        icon: "analytics",
-        label: "Brain Analytics",
+        url: "/super-admin/system-settings",
+        icon: "sliders",
+        label: "System Settings",
       },
       {
-        url: "/brain-analytics-page#dictionary-manager",
-        icon: "analytics",
-        label: "Dictionary Manager",
+        label: "You",
+        icon: "shield",
+        children: [
+          { url: "/profile", icon: "user", label: "profile" },
+          { url: "/settings", icon: "settings", label: "settings" },
+        ]
       },
-      { url: "/myProfile", icon: "myProfile", label: "My Profile" },
-    ],
-    "lgu-admin": [
-      { url: "/dashboard", icon: "dashboard", label: "Dashboard" },
-      { url: "/assignments", icon: "assignments", label: "Assignments" },
-      { url: "/heatmap", icon: "heatmap", label: "Heatmap" },
-      {
-        url: "/brain-analytics-page",
-        icon: "analytics",
-        label: "Brain Analytics",
-      },
-      { url: "/publish", icon: "publish", label: "Publish" },
-      {
-        url: "/brain-analytics-page#dictionary-manager",
-        icon: "analytics",
-        label: "Dictionary Manager",
-      },
-      { url: "/myProfile", icon: "myProfile", label: "My Profile" },
     ],
   };
-  // Handle simplified LGU roles
-  if (role === "lgu-hr") {
-    return menuItems["lgu-hr"] || [];
+
+  // Map any legacy LGU roles to the unified "lgu" role
+  if (role.startsWith("lgu-") || role === "complaint-coordinator") {
+    role = "lgu";
   }
-  if (role === "lgu-admin") {
-    return menuItems["lgu-admin"] || [];
-  }
-  if (role === "lgu") {
-    return [
-      { url: "/dashboard", icon: "dashboard", label: "Dashboard" },
-      { url: "/task-assigned", icon: "taskAssigned", label: "Task Assigned" },
-      { url: "/myProfile", icon: "myProfile", label: "My Profile" },
-    ];
-  }
-  // Return menu items for exact role match
-  const items = menuItems[role] || [];
-  console.log(
-    "[SIDEBAR] Menu items for role:",
-    role,
-    "found",
-    items.length,
-    "items"
-  );
+
+  // Return menu items for the role
+  const items = menuItems[role] || menuItems["citizen"];
   return items;
 }
 // Sidebar search removed per requirements
@@ -378,20 +417,51 @@ function updateToggleSwitch(isDark) {
 function initializeSidebarThemeToggle() {
   const themeToggleBtn = document.getElementById("sidebar-theme-toggle");
   if (themeToggleBtn) {
-    // Initial state
-    const savedTheme = localStorage.getItem("theme") || "light";
-    updateToggleSwitch(savedTheme === "dark");
+    const updateSidebarState = () => {
+      const stored = localStorage.getItem("theme-preference") || "dark";
+      updateToggleSwitch(stored === "dark");
+    };
+
+    updateSidebarState();
 
     themeToggleBtn.addEventListener("click", () => {
-      const isDark = document.documentElement.classList.contains("dark");
-      const newTheme = isDark ? "light" : "dark";
+      if (window.themeManager) {
+        window.themeManager.toggle();
+      } else {
+        const isDark = document.documentElement.classList.contains("dark");
+        const newTheme = isDark ? "light" : "dark";
+        if (newTheme === "dark") document.documentElement.classList.add("dark");
+        else document.documentElement.classList.remove("dark");
+        localStorage.setItem("theme-preference", newTheme);
+      }
+    });
 
-      applyTheme(newTheme);
-      localStorage.setItem("theme", newTheme);
-      updateToggleSwitch(!isDark);
+    window.addEventListener("themeChanged", (e) => {
+      updateToggleSwitch(e.detail.theme === "dark");
+    });
+  }
+}
 
-      // Dispatch event for other components (like header) to update
-      window.dispatchEvent(new Event("themeChanged"));
+function initializeRoleSwitcher() {
+  const roleSwitcherBtn = document.getElementById("sidebar-role-switcher");
+  if (roleSwitcherBtn) {
+    roleSwitcherBtn.addEventListener("click", () => {
+      const userMeta = JSON.parse(localStorage.getItem("cl_user_meta") || "{}");
+      const realRole = normalizeRole(userMeta.role || "");
+      const isOverridden = Boolean(localStorage.getItem("cl_role_override")) || document.cookie.includes("app_mode=citizen_mode");
+
+      if (isOverridden) {
+        // We are in Sim Mode, so we always allow going back
+        localStorage.removeItem("cl_role_override");
+        document.cookie = "app_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+      } else if (realRole === "super-admin" || realRole === "lgu") {
+        // Not in Sim Mode, but user has permission to enter it
+        localStorage.setItem("cl_role_override", "citizen");
+        document.cookie = "app_mode=citizen_mode; path=/; max-age=31536000;";
+      }
+
+      // Redirect to dashboard to let the server route to the correct role's page
+      window.location.href = "/dashboard";
     });
   }
 }
@@ -421,24 +491,59 @@ function initializeLogout() {
 // Set active menu item based on current page
 function setActiveMenuItem() {
   const currentPath = window.location.pathname;
+  const currentSearch = window.location.search;
+  const fullCurrent = currentPath + currentSearch;
+
   const menuItems = document.querySelectorAll(".sidebar-menu a");
+  const groups = document.querySelectorAll(".menu-group");
+
+  // Clear group active states
+  groups.forEach(g => g.classList.remove("child-active"));
+
   menuItems.forEach((item) => {
     const href = item.getAttribute("href");
-    if (href && currentPath.includes(href.replace(root, ""))) {
+    if (!href) return;
+
+    // Normalize href for comparison
+    const itemUrl = href.replace(root, "");
+
+    // Exact match check (including search params for tabbed pages)
+    let isMatch = false;
+    if (itemUrl.includes("?")) {
+      // For items with tabs, we need exact or very close match
+      isMatch = fullCurrent === itemUrl || fullCurrent.startsWith(`${itemUrl  }&`) || fullCurrent === itemUrl.split("#")[0];
+    } else {
+      // For standard items
+      isMatch = currentPath === itemUrl || (itemUrl !== "/" && currentPath.startsWith(`${itemUrl  }/`));
+    }
+
+    if (isMatch) {
       item.classList.add("active");
       item.setAttribute("aria-current", "page");
+
+      // If it's a child, handle the parent group
+      const group = item.closest(".menu-group");
+      if (group) {
+        group.classList.add("child-active");
+        group.classList.add("expanded");
+      }
     } else {
       item.classList.remove("active");
       item.removeAttribute("aria-current");
     }
   });
 }
-// Initialize theme on page load
+// Initialize theme and navigation on page load
 document.addEventListener("DOMContentLoaded", () => {
-  const savedTheme = localStorage.getItem("theme") || "light";
+  const savedTheme = localStorage.getItem("theme-preference") || "dark";
   applyTheme(savedTheme);
   updateToggleSwitch(savedTheme === "dark");
 });
+
+// Sync with navigation changes
+window.addEventListener("popstate", setActiveMenuItem);
+window.addEventListener("cl:urlChanged", setActiveMenuItem);
+window.setActiveMenuItem = setActiveMenuItem;
 
 export { initializeSidebar, setActiveMenuItem, openSidebar, closeSidebar };
 

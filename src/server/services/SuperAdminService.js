@@ -1,9 +1,9 @@
-const RoleManagementService = require("./RoleManagementService");
+const RoleManagementService = require("./user/RoleManagementService");
 const { USER_ROLES } = require("../../shared/constants");
 const Database = require("../config/database");
 
 /**
- * SuperAdminService
+ * superAdminService
  * Handles Super Admin operations: role swaps, department transfers, system logs
  */
 class SuperAdminService {
@@ -34,6 +34,14 @@ class SuperAdminService {
       const validRoles = Object.values(USER_ROLES);
       if (!validRoles.includes(newRole)) {
         throw new Error(`Invalid role: ${newRole}`);
+      }
+
+      // Simple Workflow Mode Check
+      if (process.env.SIMPLE_WORKFLOW_MODE === "true") {
+        const allowedSwaps = ["citizen", "lgu", "super-admin"];
+        if (!allowedSwaps.includes(newRole)) {
+          throw new Error(`Role '${newRole}' is not allowed in Simple Workflow Mode.`);
+        }
       }
 
       // Prepare metadata - clear department if demoting to citizen
@@ -97,10 +105,10 @@ class SuperAdminService {
    * Transfer user between departments
    * Can transfer officers, admins, coordinators, HR across departments
    */
-  async transferUserBetweenDepartments(
+  async transferUserBetweendepartments(
     userId,
-    fromDepartment,
-    toDepartment,
+    fromdepartment,
+    todepartment,
     superAdminId,
     reason
   ) {
@@ -128,27 +136,27 @@ class SuperAdminService {
         throw new Error("Reason is required for department transfer");
       }
       // Perform transfer
-      const result = await this.roleService.transferDepartment(
+      const result = await this.roleService.transferdepartment(
         userId,
-        fromDepartment,
-        toDepartment,
+        fromdepartment,
+        todepartment,
         superAdminId,
         reason
       );
       return {
         success: true,
-        message: `User transferred from ${fromDepartment} to ${toDepartment}`,
+        message: `User transferred from ${fromdepartment} to ${todepartment}`,
         ...result,
       };
     } catch (error) {
-      console.error("[SUPER_ADMIN] Department transfer error:", error);
+      console.error("[SUPER_ADMIN] department transfer error:", error);
       throw error;
     }
   }
   /**
    * Promote citizen to any department
    */
-  async assignCitizenToDepartment(
+  async assignCitizenTodepartment(
     userId,
     role,
     departmentId,
@@ -161,11 +169,14 @@ class SuperAdminService {
       if (adminRole !== "super-admin") {
         throw new Error("Only Super Admin can assign citizens to departments");
       }
-      // Get current role - must be citizen
+      // Get current role - strict check removed to support flexible role management
       const currentRole = await this.roleService.getUserRole(userId);
+      // Logic for strict/flexible mode is handled in the controller
+      /*
       if (currentRole !== "citizen") {
         throw new Error("Can only assign citizens to departments");
       }
+      */
       // Validate target role - must be LGU officer, admin, HR, coordinator, or super-admin
       // Note: Roles should NOT include department suffix (e.g., use 'lgu-officer' not 'lgu-ceeo')
       const isLguOfficer = role === "lgu-officer" || role === "lgu";
@@ -173,8 +184,18 @@ class SuperAdminService {
       const isLguHR = role === "lgu-hr";
       const isCoordinator = role === "complaint-coordinator";
       const isSuperAdmin = role === "super-admin";
-      const isValidRole =
+
+      let isValidRole =
         isLguOfficer || isLguAdmin || isLguHR || isCoordinator || isSuperAdmin;
+
+      // Simple Workflow Mode Limitation
+      if (process.env.SIMPLE_WORKFLOW_MODE === "true") {
+        // Only allow LGU (officer) or Super Admin.
+        // Block Admin, HR, Coordinator
+        if (isLguAdmin || isLguHR || isCoordinator) {
+          isValidRole = false;
+        }
+      }
 
       console.log("[SUPER_ADMIN] Role validation:", {
         role,
@@ -201,14 +222,14 @@ class SuperAdminService {
 
       // Update role and assign department (if not super-admin or complaint-coordinator)
       const rolesWithoutDept = ["super-admin", "complaint-coordinator"];
-      const needsDepartment = !rolesWithoutDept.includes(role);
+      const needsdepartment = !rolesWithoutDept.includes(role);
 
       let modificationReason = reason;
       if (!modificationReason) {
         if (role === "super-admin") {
           modificationReason = "Promoted to Super Admin";
         } else if (role === "complaint-coordinator") {
-          modificationReason = "Promoted to Complaint Coordinator";
+          modificationReason = "Promoted to complaint Coordinator";
         } else {
           modificationReason = `Assigned to ${departmentId} as ${role}`;
         }
@@ -220,9 +241,9 @@ class SuperAdminService {
       };
 
       // Only assign department if role requires it
-      if (needsDepartment && departmentId) {
+      if (needsdepartment && departmentId) {
         metadata.department = departmentId;
-      } else if (!needsDepartment) {
+      } else if (!needsdepartment) {
         // Explicitly clear department for roles that don't need it
         metadata.department = null;
         metadata.clear_department = true;
@@ -423,7 +444,7 @@ class SuperAdminService {
         throw new Error("Only Super Admin can view latest registered users");
       }
 
-      const userService = require("./UserService");
+      const userService = require("./user/UserService");
 
       // Get all users (we'll filter for confirmed emails/OAuth)
       const result = await userService.getUsers(
@@ -464,7 +485,7 @@ class SuperAdminService {
                 email_confirmed_at: authUser.email_confirmed_at,
                 is_oauth: Boolean(
                   authUser.app_metadata?.provider &&
-                    authUser.app_metadata.provider !== "email"
+                  authUser.app_metadata.provider !== "email"
                 ),
               };
             })
@@ -473,7 +494,7 @@ class SuperAdminService {
         }
       } catch (err) {
         console.error("[SUPER_ADMIN] Error fetching confirmed users:", err);
-        // Fallback: return users from UserService (may not have confirmation status)
+        // Fallback: return users from userService (may not have confirmation status)
         confirmedUsers = allUsers
           .sort(
             (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
@@ -502,7 +523,7 @@ class SuperAdminService {
         throw new Error("Only Super Admin can view role distribution");
       }
 
-      const userService = require("./UserService");
+      const userService = require("./user/UserService");
       const result = await userService.getUsers(
         { includeInactive: false },
         { page: 1, limit: 10000 }
@@ -564,10 +585,12 @@ class SuperAdminService {
   }
   /**
    * Helper: Get count from table
+   * Uses a fresh service-role client to bypass RLS on tables like complaints
    */
   async getCount(tableName) {
     try {
-      const { count, error } = await this.supabase
+      const client = Database.getServiceClient();
+      const { count, error } = await client
         .from(tableName)
         .select("*", { count: "exact", head: true });
       if (error) throw error;
@@ -642,9 +665,11 @@ class SuperAdminService {
         }
       });
 
-      // Aggregate Complaints by Date
+      // Aggregate complaints by Date
       // Note: usage of submitted_at is correct as per schema
-      const { data: complaints, error: complaintError } = await this.supabase
+      // Use service client to bypass RLS recursion on complaints table
+      const serviceClient = Database.getServiceClient();
+      const { data: complaints, error: complaintError } = await serviceClient
         .from("complaints")
         .select("submitted_at")
         .gte("submitted_at", strSevenDaysAgo);

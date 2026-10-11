@@ -3,7 +3,7 @@ const Database = require("../config/database");
 class ComplaintAssignmentRepository {
 
   constructor() {
-    this.db = new Database();
+    this.db = Database.getInstance();
     this.supabase = this.db.getClient();
     this.table = "complaint_assignments";
   }
@@ -34,7 +34,7 @@ class ComplaintAssignmentRepository {
     if (error) throw error;
     return data;
   }
-  async listByComplaint(complaintId) {
+  async listBycomplaint(complaintId) {
     const { data, error } = await this.supabase
       .from(this.table)
       .select("*")
@@ -86,10 +86,10 @@ class ComplaintAssignmentRepository {
     if (error) throw error;
     return data;
   }
-  async findByComplaintIds(complaintIds) {
+  async findBycomplaintIds(complaintIds) {
     const { data, error } = await this.supabase
       .from(this.table)
-      .select("assigned_to, status, assigned_at, assigned_by, department_id")
+      .select("complaint_id, assigned_to, status, assigned_at, assigned_by, department_id")
       .in("complaint_id", complaintIds);
     if (error) throw error;
     return data || [];

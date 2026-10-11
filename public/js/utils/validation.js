@@ -278,7 +278,11 @@ export const setupRealtimeValidation = (form) => {
     if (!input) return;
     const value = (input.value || "").trim();
     const rule = rules[selector] || {};
-    if (rule.required && !value) {
+    
+    // Check if element is currently required (dynamic)
+    const isRequired = input.hasAttribute("required") || rule.required;
+
+    if (isRequired && !value) {
       return setError(input, "This field is required");
     }
     if (rule.minLength && value.length < rule.minLength) {
@@ -308,12 +312,18 @@ export const setupRealtimeValidation = (form) => {
  * @returns {Object}
  */
 
-export const extractComplaintFormData = (formElement) => {
+export const extractcomplaintFormData = (formElement) => {
   if (!formElement) return {};
   const getVal = (selector) => {
     const el = formElement.querySelector(selector);
     return el ? el.value.trim() : "";
   };
+
+  const getSelectText = (selector) => {
+    const el = formElement.querySelector(selector);
+    return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].text.toLowerCase() : "";
+  };
+
   const parseNum = (selector) => {
     const v = getVal(selector);
     if (v === "") return null;
@@ -326,20 +336,21 @@ export const extractComplaintFormData = (formElement) => {
       '#departmentCheckboxes input[type="checkbox"]:checked'
     )
   ).map((cb) => cb.value);
+
+  const categoryName = getSelectText("#complaintCategory");
+  const isOthers = categoryName.includes("other");
+
   return {
     title: getVal("#complaintTitle"),
-    // type field removed - not in current schema
-    // subtype field removed - not in current schema
     category: getVal("#complaintCategory"),
     subcategory: getVal("#complaintSubcategory"),
+    isOthers, // Flag for validation
     description: getVal("#description"),
     location_text: getVal("#location"),
     latitude: parseNum("#latitude"),
     longitude: parseNum("#longitude"),
-    latitude: parseNum("#latitude"),
-    longitude: parseNum("#longitude"),
     urgency_level: "low", // Default to low
-    departments: departments, // User selected departments (will be merged with NLP suggestions)
+    departments, // User selected departments (will be merged with NLP suggestions)
   };
 };
 
@@ -376,7 +387,7 @@ export const isWithinCityBoundary = async (latitude, longitude) => {
  * @returns {{ valid: boolean, errors: string[] }}
  */
 
-export const validateComplaintForm = (data) => {
+export const validatecomplaintForm = (data) => {
   const errors = [];
   if (!data) {
     return { valid: false, errors: ["Invalid form data"] };
@@ -386,6 +397,8 @@ export const validateComplaintForm = (data) => {
   const locationText = sanitizeString(data.location_text || "");
   const category = sanitizeString(data.category || "");
   const subcategory = sanitizeString(data.subcategory || "");
+  const isOthers = data.isOthers || false;
+
   if (!title || title.trim().length === 0) errors.push("Title is required");
   if (title && title.length < 3)
     errors.push("Title must be at least 3 characters");
@@ -394,11 +407,15 @@ export const validateComplaintForm = (data) => {
   if (description && description.length < 10)
     errors.push("Description must be at least 10 characters");
   if (!locationText) errors.push("Location is required");
+
   // Validate hierarchical form fields
   if (!category) errors.push("Category is required");
-  if (!subcategory) errors.push("Subcategory is required");
-  if (!category) errors.push("Category is required");
-  if (!subcategory) errors.push("Subcategory is required");
+
+  // Subcategory is required unless category is "Others"
+  if (!isOthers && !subcategory) {
+    errors.push("Subcategory is required");
+  }
+
   // Urgency and departments are handled automatically now
   // If one coordinate is provided, both should be valid numbers
   const hasLat = data.latitude !== null && data.latitude !== void 0;
@@ -413,8 +430,6 @@ export const validateComplaintForm = (data) => {
     ) {
       errors.push("Coordinates must be numeric");
     }
-    // Note: Boundary check is async, so it should be done separately before form submission
-    // This validation function is synchronous, so boundary check happens in the form handler
   }
   return { valid: errors.length === 0, errors };
 };
@@ -425,7 +440,7 @@ export const validateComplaintForm = (data) => {
  * @param {number} longitude - Longitude coordinate
  * @returns {Promise<{valid: boolean, error?: string}>}
  */
-export const validateComplaintCoordinates = async (latitude, longitude) => {
+export const validatecomplaintCoordinates = async (latitude, longitude) => {
   if (typeof latitude !== "number" || typeof longitude !== "number") {
     return { valid: false, error: "Coordinates must be numeric" };
   }
@@ -438,7 +453,7 @@ export const validateComplaintCoordinates = async (latitude, longitude) => {
   if (!withinBoundary) {
     return {
       valid: false,
-      error: "Complaint location must be within Digos City boundaries",
+      error: "complaint location must be within Digos City boundaries",
     };
   }
 
